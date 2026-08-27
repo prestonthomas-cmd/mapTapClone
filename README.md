@@ -121,9 +121,19 @@ hardest — which is where the island capitals live.
 
 ## Deployment
 
-Pushing to `main` triggers `.github/workflows/pages.yml`, which enables GitHub Pages if
-needed and publishes the repository root as-is. There is no build step — the deployed files
-are exactly the files in the repo.
+Pushing to `main` triggers `.github/workflows/pages.yml`, which publishes the repository
+root as-is. There is no build step — the deployed files are exactly the files in the repo.
+
+**One-time setup:** GitHub Pages has to be turned on by the repository owner before the
+workflow can deploy. Creating a Pages site is an owner-level action, so the workflow's own
+token cannot do it — the first run fails with
+`Create Pages site failed: Resource not accessible by integration` until it is done.
+
+> Settings → Pages → **Build and deployment → Source: GitHub Actions**
+
+Then re-run the workflow (Actions → *Deploy to GitHub Pages* → **Run workflow**), or just
+push again. After that the site is at
+`https://prestonthomas-cmd.github.io/mapTapClone/` and every push to `main` redeploys it.
 
 ## Regenerating the data
 
