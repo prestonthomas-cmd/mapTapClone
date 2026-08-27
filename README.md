@@ -110,15 +110,36 @@ Satellite view shows the imagery alone — no country borders, since they are no
 planet, and coastlines are already legible in the plate. The outline style (the 🛰 button)
 keeps them for when you want them.
 
-**Raising the imagery resolution.** The bundled plate is 4096x2048, which is the largest
-that ships with `three-globe` and the best available offline. Magnifying it 20x inevitably
-softens it. To go sharper, download an 8K or 16K equirectangular Earth — [Solar System
-Scope](https://www.solarsystemscope.com/textures/) publishes CC BY 4.0 ones, [NASA Visible
-Earth](https://visibleearth.nasa.gov/collection/1484/blue-marble) the originals — save it as
-`tools/source/earth.jpg` and run `npm run build:textures`. The extra tiers are generated,
-listed in `assets/plates.js` and picked up automatically; nothing else needs changing.
-Plates above 4096 wide are fetched only once you zoom past 2.5x, and are skipped entirely on
-GPUs whose `MAX_TEXTURE_SIZE` cannot hold them.
+### Raising the imagery resolution
+
+The bundled plate is 4096x2048 — the largest that ships with `three-globe`, and the best
+that can be fetched from a sandboxed build. Magnifying it 20x inevitably softens it.
+
+To go sharper, download a bigger equirectangular plate and drop it in `tools/source/`:
+
+- [NASA Blue Marble Next Generation, topography and bathymetry](https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/base-topography-bathymetry/)
+  — the original, one plate per month. Take the largest **single-file** 2:1 image offered.
+  The very highest resolution is published as eight tiles that would need stitching first.
+- [Solar System Scope](https://www.solarsystemscope.com/textures/) — 8K and 16K, CC BY 4.0,
+  single files, no stitching.
+
+Then:
+
+```bash
+cp ~/Downloads/world.topo.bathy.*.jpg tools/source/
+npm run build:textures
+```
+
+Any image in `tools/source/` is picked up, whatever it is called, so a file straight off NASA
+works as downloaded. The script never upscales, generates each tier the source can support,
+and writes `assets/plates.js` so the page only requests plates that exist. Nothing else
+changes — commit the regenerated `assets/` and push.
+
+Tiers stop at 8192 by default: roughly 2–4 MB, and within the `MAX_TEXTURE_SIZE` of
+essentially every GPU that reports more than 4096. Pass `--max=16384` to opt into the
+largest tier, which is a 12 MB+ download. Plates above 4096 wide are fetched only once you
+zoom past 2.5x, and are skipped entirely on GPUs that cannot hold them — plenty of phones
+still cap at 4096. `tools/source/` is gitignored; the generated plates are what ship.
 
 **The globe** is a real orthographic projection rather than an image or a map library.
 Dragging changes the geographic point at the centre of the disc; a tap is unprojected back
