@@ -38,7 +38,6 @@
     this.baseRadius = 200;
     this.zoom = 1;
 
-    this.style = (this.opts.style === 'vector') ? 'vector' : 'satellite';
     this.satellite = null;
     if (this.opts.glCanvas && MT.SatelliteLayer) {
       var self0 = this;
@@ -105,16 +104,12 @@
     this.requestRender();
   };
 
-  /* Imagery is only used once a plate has actually decoded; until then (and
-   * wherever WebGL is unavailable) the vector globe stands in, so there is
-   * never an empty disc. */
+  /* The globe is always satellite. The vector renderer is kept purely as the
+   * stand-in for the two cases where there is no imagery to draw: a plate that
+   * has not decoded yet, and a device without WebGL. Without it those would be
+   * an empty disc rather than a playable game. */
   Globe.prototype.usingSatellite = function () {
-    return this.style === 'satellite' && !!this.satellite && this.satellite.ready;
-  };
-
-  Globe.prototype.setStyle = function (style) {
-    this.style = style === 'vector' ? 'vector' : 'satellite';
-    this.requestRender();
+    return !!this.satellite && this.satellite.ready;
   };
 
   Globe.prototype.halfDiagonal = function () {

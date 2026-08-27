@@ -66,7 +66,6 @@ Future dailies are clamped back to today.
 | Zoom | scroll wheel, double-click, or `+` / `−` | pinch, or the on-screen buttons |
 | Guess | click | tap |
 | Lock in / next round | `Enter` | the button |
-| Satellite / outline view | the 🛰 button | the 🛰 button |
 
 ## Layout
 
@@ -103,12 +102,11 @@ fragment shader instead, which discards anything on the far side of the sphere.
 
 The plate loads in two steps: a 75 KB 1024x512 version paints almost immediately, then the
 1 MB 4096x2048 one replaces it. Until a plate decodes — and on any device without WebGL —
-the vector globe stands in, so there is never an empty disc. The 🛰 button switches between
-the two views and the choice is remembered.
+the vector globe stands in, so there is never an empty disc — it is a fallback, not a style
+choice, and there is no way to select it.
 
-Satellite view shows the imagery alone — no country borders, since they are not on the real
-planet, and coastlines are already legible in the plate. The outline style (the 🛰 button)
-keeps them for when you want them.
+The globe shows the imagery alone — no country borders, since they are not on the real
+planet, and coastlines are already legible in the plate.
 
 ### The imagery
 

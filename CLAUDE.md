@@ -26,6 +26,10 @@ There is no test suite. Check changes by actually playing the game:
 npm start        # http://localhost:8080
 ```
 
-Rendering changes deserve a look at both map styles (the 🛰 button) and at both
-low and high zoom, since level-of-detail and the satellite layer switch over at
-2.4x zoom.
+Rendering changes deserve a look at both low and high zoom, since level of
+detail changes at 2.4x and the 8K plate only loads past 2.5x.
+
+The globe is always satellite. The vector renderer in `globe.js` is not a
+style option — it is the stand-in for a plate that has not decoded yet and for
+devices without WebGL, so it still has to work. Test it by launching with
+WebGL disabled.

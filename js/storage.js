@@ -20,7 +20,7 @@
   var store = backend();
 
   function blank() {
-    return { dailies: {}, practiceCount: 0, practiceBest: 0, practiceTotal: 0, style: 'satellite' };
+    return { dailies: {}, practiceCount: 0, practiceBest: 0, practiceTotal: 0 };
   }
 
   function read() {
@@ -100,25 +100,7 @@
     };
   }
 
-  function reset() {
-    var style = read().style;          // a display preference is not a stat
-    var fresh = blank();
-    fresh.style = style;
-    write(fresh);
-  }
+  function reset() { write(blank()); }
 
-  function getStyle() {
-    return read().style === 'vector' ? 'vector' : 'satellite';
-  }
-
-  function setStyle(style) {
-    var state = read();
-    state.style = style === 'vector' ? 'vector' : 'satellite';
-    write(state);
-  }
-
-  MT.storage = {
-    getDaily: getDaily, saveResult: saveResult, stats: stats,
-    reset: reset, read: read, getStyle: getStyle, setStyle: setStyle
-  };
+  MT.storage = { getDaily: getDaily, saveResult: saveResult, stats: stats, reset: reset, read: read };
 })(window.MT = window.MT || {});
