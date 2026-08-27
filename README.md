@@ -110,12 +110,18 @@ Satellite view shows the imagery alone — no country borders, since they are no
 planet, and coastlines are already legible in the plate. The outline style (the 🛰 button)
 keeps them for when you want them.
 
-### Raising the imagery resolution
+### The imagery
 
-The bundled plate is 4096x2048 — the largest that ships with `three-globe`, and the best
-that can be fetched from a sandboxed build. Magnifying it 20x inevitably softens it.
+The shipped plate is the **8192x4096 Solar System Scope Earth day map** (CC BY 4.0, derived
+from NASA Blue Marble, cloudless). Provenance and the exact source URL are recorded in
+`tools/source/README.md`.
 
-To go sharper, download a bigger equirectangular plate and drop it in `tools/source/`:
+It replaced a 4096x2048 Blue Marble Next Generation plate, doubling land resolution — which
+is what you actually zoom into. The trade is the ocean: BMNG carries topography *and
+bathymetry*, so the sea floor is shaded, while this day map has a flatter blue. Land detail
+won because the game is about finding cities.
+
+To change it, drop a different equirectangular plate in `tools/source/`:
 
 - [NASA Blue Marble Next Generation, topography and bathymetry](https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/base-topography-bathymetry/)
   — the original, one plate per month, up to 21600x10800. Either a single 2:1 image or the
@@ -218,7 +224,7 @@ the default branch. When that policy points at a branch you have since renamed o
 the job is rejected before it executes a single step: a few seconds, no logs, nothing to
 debug. Omitting the block skips the job-level gate; the deploy still targets `github-pages`.
 
-## Regenerating the data## Regenerating the data
+## Regenerating the data
 
 `data/world.js` and `data/cities.js` are generated and checked in. To rebuild:
 
@@ -234,6 +240,21 @@ from [world-countries](https://github.com/mledoze/countries) (ODbL).
 
 Polygons are stored as encoded polylines at 0.001° precision — 438 KB for two levels of
 detail, versus about 4 MB as raw GeoJSON.
+
+The satellite plates rebuild separately:
+
+```bash
+npm run build:textures
+```
+
+Their source image is not committed — `tools/source/README.md` records where it came from
+and its licence. Running the build without it falls back to the 4096x2048 plate bundled with
+`three-globe`, which would silently discard the 8K tier, so the build refuses and writes
+nothing unless given `--force`.
+
+Imagery is the 8K Earth day map from
+[Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0, derived from
+NASA Blue Marble). That attribution is also shown in the game's How to play panel.
 
 ## Not affiliated with MapTap
 

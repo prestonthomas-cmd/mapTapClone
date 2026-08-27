@@ -134,6 +134,12 @@
       '<p>Every game has a number. <strong>Daily #' + puzzle.todayNumber() + '</strong> is the same for ' +
         'everyone today, so scores are comparable. <strong>Practice</strong> games are numbered separately ' +
         'and never run out — share a practice number with a friend and you both get exactly the same five cities.</p>' +
+      '<h3>Credits</h3>' +
+      '<p>Satellite imagery: 8K Earth day map by ' +
+        '<a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a>, ' +
+        'CC BY 4.0, derived from NASA Blue Marble. Coastlines from Natural Earth; ' +
+        'city locations from GeoNames.</p>' +
+      '<p>Not affiliated with MapTap.</p>' +
       '<div class="panel__actions">' +
         '<button class="btn btn--primary" data-act="' + (backToMenu ? 'menu' : 'close') + '">Got it</button>' +
       '</div>'

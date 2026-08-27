@@ -2,6 +2,7 @@ node_modules/
 .DS_Store
 *.log
 
-# Downloaded source imagery - large, and the generated plates in assets/ are
-# what actually ship.
-tools/source/
+# Source imagery is large and the generated plates in assets/ are what ship.
+# The provenance note is kept.
+tools/source/*
+!tools/source/README.md

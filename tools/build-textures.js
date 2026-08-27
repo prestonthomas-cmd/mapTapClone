@@ -194,10 +194,25 @@ async function plateAt(src, width, height) {
 
   fs.mkdirSync(OUT, { recursive: true });
 
+  const plan = TIERS.filter((t) => t.width <= meta.width && t.width <= MAX_WIDTH);
+
+  // Check before writing anything: rebuilding without the source plate present
+  // silently falls back to the bundled 4096 one, which would quietly discard
+  // the larger tiers and leave assets/ half from one source and half another.
+  const willProduce = plan.map((t) => `earth-${t.width / 1024}k.jpg`);
+  const wouldDrop = fs.existsSync(OUT)
+    ? fs.readdirSync(OUT).filter((f) => /^earth-\d+k\.jpg$/.test(f) && !willProduce.includes(f))
+    : [];
+  if (wouldDrop.length && !src.custom && !process.argv.includes('--force')) {
+    console.error(`\nRefusing to drop ${wouldDrop.join(', ')} - nothing has been written.`);
+    console.error('Those were built from a larger source than the bundled plate. Put the');
+    console.error('source back in tools/source/ (see the README there), or pass --force to');
+    console.error('rebuild at the smaller size anyway.');
+    process.exit(1);
+  }
+
   const produced = [];
-  for (const tier of TIERS) {
-    if (tier.width > meta.width) continue;          // never upscale
-    if (tier.width > MAX_WIDTH) continue;           // opt in with --max=
+  for (const tier of plan) {
     const name = `earth-${tier.width >= 1024 ? (tier.width / 1024) + 'k' : tier.width}.jpg`;
     const dest = path.join(OUT, name);
     let pipe = tone(await plateAt(src, tier.width, tier.width / 2));
@@ -212,12 +227,11 @@ async function plateAt(src, width, height) {
                 (tier.defer ? '  (loaded on zoom)' : ''));
   }
 
-  // Remove tiers from a previous, larger source so the page never 404s.
-  for (const f of fs.readdirSync(OUT)) {
-    if (/^earth-\d+k\.jpg$/.test(f) && !produced.some((p) => p.url.endsWith(f))) {
-      fs.unlinkSync(path.join(OUT, f));
-      console.log(`  removed stale ${f}`);
-    }
+  // Tiers a previous, larger source produced must go, or the page would list
+  // plates that no longer exist.
+  for (const f of wouldDrop) {
+    fs.unlinkSync(path.join(OUT, f));
+    console.log(`  removed stale ${f}`);
   }
 
   const js =
