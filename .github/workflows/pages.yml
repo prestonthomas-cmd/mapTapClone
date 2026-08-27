@@ -18,9 +18,12 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    # No `environment:` block on purpose. Naming the github-pages environment
+    # here puts the job behind that environment's deployment-branch policy,
+    # which GitHub pins to whichever branch was default when Pages was first
+    # enabled — and it does not follow later changes to the default branch.
+    # The deploy itself still targets github-pages; only the job-level gate
+    # is skipped.
     steps:
       - uses: actions/checkout@v4
 
