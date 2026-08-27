@@ -155,12 +155,23 @@ async function plateAt(src, width, height) {
   const root = path.join(__dirname, '..');
   const metas = await Promise.all(src.tiles.map((t) => open(t.path).metadata()));
 
-  // Every tile must match, or the grid does not line up.
-  const tileW = metas[0].width, tileH = metas[0].height;
-  if (metas.some((m) => m.width !== tileW || m.height !== tileH)) {
-    console.error('Tiles are not all the same size:');
+  // Each tile is resized into its cell anyway, so tiles need not match pixel
+  // for pixel - only in shape. Hand-resized tiles (the practical way to get a
+  // 21600x10800 set under an upload limit) often differ by a pixel or two.
+  // A tile of the wrong shape, though, means the wrong file is in the set.
+  const aspects = metas.map((m) => m.width / m.height);
+  const oddOne = aspects.findIndex((a) => Math.abs(a - aspects[0]) > 0.01);
+  if (oddOne !== -1) {
+    console.error('Tiles are not all the same shape, so they are not one set:');
     src.tiles.forEach((t, i) => console.error(`  ${path.basename(t.path)} ${metas[i].width}x${metas[i].height}`));
     process.exit(1);
+  }
+
+  const tileW = Math.max(...metas.map((m) => m.width));
+  const tileH = Math.max(...metas.map((m) => m.height));
+  if (metas.some((m) => m.width !== tileW || m.height !== tileH)) {
+    console.warn(`note: tiles vary in size (up to ${tileW}x${tileH}); each is resampled ` +
+                 'into its cell, so the grid still lines up.');
   }
 
   const meta = { width: tileW * src.cols, height: tileH * src.rows };

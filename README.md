@@ -133,12 +133,22 @@ npm run build:textures
 Any image in `tools/source/` is picked up, whatever it is called, so files straight off NASA
 work as downloaded.
 
+**You do not need full-resolution tiles.** Output tiers stop at 8192 wide by default, and an
+8192x4096 plate needs each tile at exactly **2048x2048** — a quarter of the width, half the
+height. Resizing each tile to 2048x2048 before you do anything else therefore costs nothing
+at all, and takes each file from tens of megabytes to one or two. That matters if you are
+uploading through GitHub's web interface, which caps at 25 MB per file (a `git push` allows
+100 MB, but committing hundreds of megabytes of source imagery you will never use again is
+not worth the history). Going past 8192 needs `--max=16384` and full-resolution tiles.
+
 **Tiles.** Drop all eight in together and they are stitched automatically. NASA names them
 `A1`..`D2`, where the letter is the column running west to east and the digit is the row
 running north to south — so `A1` is the northwest corner and `D2` the southeast. The build
 reads that marker off the filename (ignoring the `3x21600x21600` part, which looks
-deceptively similar), checks the grid is complete and every tile the same size, and says
-plainly what is wrong when it is not.
+deceptively similar), and checks the grid is complete. Tiles need not match pixel for
+pixel — each is resampled into its cell, so hand-resized tiles that differ by a pixel or two
+are fine and only produce a note. A tile of a different *shape* is rejected, because that
+means the wrong file is in the set.
 
 Tiles are resized straight into their cell rather than being stitched at full resolution
 first — eight 5400x5400 tiles would be a 700 MB intermediate for an output most of which is
