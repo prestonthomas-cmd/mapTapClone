@@ -1,12 +1,15 @@
 # MapTap Clone
 
 A playable clone of [MapTap](https://maptap.gg), the daily geography game. You get five
-cities, one at a time, on a globe you can spin and zoom. Tap where you think each one is;
-the closer you are, the more points you keep.
+cities, one at a time, on a satellite globe you can spin and zoom. Tap where you think each
+one is; the closer you are, the more points you keep.
 
-Runs entirely in the browser. No build step, no bundler, no framework, no network calls.
+Runs entirely in the browser. No build step, no bundler, no framework, no third-party
+requests.
 
-## Play it
+**Play it: https://prestonthomas-cmd.github.io/mapTapClone/**
+
+## Play it locally
 
 ```bash
 npm start          # then open http://localhost:8080
@@ -47,6 +50,7 @@ Future dailies are clamped back to today.
 | Zoom | scroll wheel, double-click, or `+` / `−` | pinch, or the on-screen buttons |
 | Guess | click | tap |
 | Lock in / next round | `Enter` | the button |
+| Satellite / outline view | the 🛰 button | the 🛰 button |
 
 ## Layout
 
@@ -54,6 +58,7 @@ Future dailies are clamped back to today.
 index.html          markup and script order
 css/style.css
 js/geo.js           spherical maths and the orthographic projection
+js/satellite.js     WebGL layer that paints the Blue Marble plate on the sphere
 js/globe.js         canvas renderer, camera, drag/zoom/tap handling
 js/worlddata.js     polygon decoding, culling metadata, point-in-country lookup
 js/rng.js           seeded PRNG (xmur3 + mulberry32)
@@ -63,11 +68,30 @@ js/share.js         the copy-and-paste result block
 js/app.js           screen flow and DOM
 data/world.js       generated country polygons
 data/cities.js      generated city pool
+assets/earth-*.jpg  satellite plates (1k placeholder, 4k full)
 tools/build-data.js regenerates both data files
+tools/build-textures.js regenerates the satellite plates
 server.js           zero-dependency static server
+.github/workflows/pages.yml  deploys to GitHub Pages on push to main
 ```
 
 ## Notes on the implementation
+
+**The satellite view** draws NASA's Blue Marble plate onto a 1-degree UV sphere in WebGL,
+projected orthographically in the vertex shader. Taking texture coordinates from the mesh
+rather than computing them per pixel means hardware mipmapping just works — no antimeridian
+seam and no hand-rolled level-of-detail — and at the game's maximum zoom the error from
+interpolating across a 1-degree triangle stays under a pixel. The exact limb comes from the
+fragment shader instead, which discards anything on the far side of the sphere.
+
+The plate loads in two steps: a 75 KB 1024x512 version paints almost immediately, then the
+1 MB 4096x2048 one replaces it. Until a plate decodes — and on any device without WebGL —
+the vector globe stands in, so there is never an empty disc. The 🛰 button switches between
+the two views and the choice is remembered.
+
+Country outlines stay vector even in satellite view. Imagery inevitably goes soft when you
+magnify a 4096-pixel-wide plate 20x, so the crisp overlay is what carries the precision when
+you are placing a pin.
 
 **The globe** is a real orthographic projection rather than an image or a map library.
 Dragging changes the geographic point at the centre of the disc; a tap is unprojected back
@@ -94,6 +118,12 @@ Worst-case settled frame at 1280×810 @2x measured 8 ms; dragging holds 60 fps.
 places most players can place without hesitation, and a penalty for countries small enough
 that a near miss still costs you. Round 1 draws from the 80 easiest, round 5 from the 840
 hardest — which is where the island capitals live.
+
+## Deployment
+
+Pushing to `main` triggers `.github/workflows/pages.yml`, which enables GitHub Pages if
+needed and publishes the repository root as-is. There is no build step — the deployed files
+are exactly the files in the repo.
 
 ## Regenerating the data
 

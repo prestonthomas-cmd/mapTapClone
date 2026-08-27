@@ -191,6 +191,26 @@
   /* ------------------------------------------------------------------ *
    * Game flow
    * ------------------------------------------------------------------ */
+  /* Satellite imagery needs WebGL; without it the button would promise
+   * something the page cannot deliver, so it is hidden instead. */
+  function reflectStyleButton() {
+    if (!globe.satellite) { el.btnStyle.hidden = true; return; }
+    var on = globe.style === 'satellite';
+    el.btnStyle.classList.toggle('icon-btn--on', on);
+    el.btnStyle.textContent = on ? '\uD83D\uDEF0' : '\u25D3';
+    el.btnStyle.title = on ? 'Satellite view — switch to outlines' : 'Outline view — switch to satellite';
+    el.btnStyle.setAttribute('aria-label', el.btnStyle.title);
+  }
+
+  function toggleStyle() {
+    if (!globe.satellite) return;
+    var next = globe.style === 'satellite' ? 'vector' : 'satellite';
+    globe.setStyle(next);
+    MT.storage.setStyle(next);
+    reflectStyleButton();
+    toast(next === 'satellite' ? 'Satellite view' : 'Outline view');
+  }
+
   function setGameChip(text) { el.gameChip.textContent = text; }
 
   function setRunningScore(v) { el.runningScore.textContent = v; }
@@ -449,10 +469,20 @@
     ['gameChip', 'runningScore', 'btnStats', 'btnHelp', 'prompt', 'promptRound', 'promptMult',
      'promptCity', 'promptCountry', 'actionbar', 'actionHint', 'btnSubmit', 'roundSheet',
      'resultCity', 'resultCountry', 'resultPoints', 'resultBreakdown', 'resultDistance',
-     'btnNext', 'overlay', 'panel', 'toast', 'btnZoomIn', 'btnZoomOut', 'btnReset']
+     'btnNext', 'overlay', 'panel', 'toast', 'btnZoomIn', 'btnZoomOut', 'btnReset', 'btnStyle']
       .forEach(function (id) { el[id] = $(id); });
 
-    globe = new MT.Globe($('globe'), { onTap: onTap });
+    globe = new MT.Globe($('globe'), {
+      onTap: onTap,
+      glCanvas: $('globeGL'),
+      style: MT.storage.getStyle(),
+      // The small plate paints almost immediately; the full one replaces it.
+      textures: [
+        { url: 'assets/earth-1k.jpg', width: 1024 },
+        { url: 'assets/earth-4k.jpg', width: 4096 }
+      ]
+    });
+    reflectStyleButton();
     MT.world.load();
     globe.requestRender();
 
@@ -474,6 +504,7 @@
       globe.zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1 / 1.7);
     });
     el.btnReset.addEventListener('click', function () { globe.flyTo(globe.camera.centreLon, 12, 1, 420); });
+    el.btnStyle.addEventListener('click', toggleStyle);
 
     el.panel.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-act]');

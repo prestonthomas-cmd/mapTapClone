@@ -4,10 +4,13 @@
   "version": "1.0.0",
   "description": "Offline data build for the MapTap clone. Run `npm install && npm run build`.",
   "scripts": {
-    "build": "node build-data.js"
+    "build": "node build-data.js",
+    "build:textures": "node build-textures.js"
   },
   "dependencies": {
     "all-the-cities": "^3.1.0",
+    "sharp": "^0.34.4",
+    "three-globe": "^2.45.2",
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2",
     "world-countries": "^5.1.0"

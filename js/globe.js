@@ -17,7 +17,10 @@
     guess: '#f4a259',
     answer: '#5fd6a0',
     arc: 'rgba(244,162,89,0.85)',
-    pin: '#ffd166'
+    pin: '#ffd166',
+    satBorder: 'rgba(255,255,255,0.30)',
+    satGraticule: 'rgba(255,255,255,0.09)',
+    satEquator: 'rgba(255,255,255,0.18)'
   };
 
   var MAX_ZOOM = 45;
@@ -35,6 +38,19 @@
     this.height = 0;
     this.baseRadius = 200;
     this.zoom = 1;
+
+    this.style = (this.opts.style === 'vector') ? 'vector' : 'satellite';
+    this.satellite = null;
+    if (this.opts.glCanvas && MT.SatelliteLayer) {
+      var self0 = this;
+      var layer = new MT.SatelliteLayer(this.opts.glCanvas, {
+        onReady: function () { self0.requestRender(); }
+      });
+      if (!layer.failed) {
+        this.satellite = layer;
+        if (this.opts.textures) layer.loadTextures(this.opts.textures);
+      }
+    }
 
     this.markers = [];        // {lon, lat, kind, label}
     this.arc = null;          // {from:[lon,lat], to:[lon,lat]}
@@ -77,12 +93,25 @@
     this.camera.cx = w / 2;
     this.camera.cy = h / 2;
     this.camera.radius = this.baseRadius * this.zoom;
+    if (this.satellite) this.satellite.resize(w, h, this.dpr);
     this.requestRender();
   };
 
   Globe.prototype.setZoom = function (z) {
     this.zoom = geo.clamp(z, 1, MAX_ZOOM);
     this.camera.radius = this.baseRadius * this.zoom;
+    this.requestRender();
+  };
+
+  /* Imagery is only used once a plate has actually decoded; until then (and
+   * wherever WebGL is unavailable) the vector globe stands in, so there is
+   * never an empty disc. */
+  Globe.prototype.usingSatellite = function () {
+    return this.style === 'satellite' && !!this.satellite && this.satellite.ready;
+  };
+
+  Globe.prototype.setStyle = function (style) {
+    this.style = style === 'vector' ? 'vector' : 'satellite';
     this.requestRender();
   };
 
@@ -330,6 +359,14 @@
   Globe.prototype._paint = function () {
     var ctx = this.ctx, cam = this.camera;
     var R = cam.radius, cx = cam.cx, cy = cam.cy;
+    var satellite = this.usingSatellite();
+
+    // Clearing keeps a stale hemisphere from showing through the transparent
+    // overlay when the vector style is selected or the plate has not decoded.
+    if (this.satellite) {
+      if (satellite) this.satellite.render(cam);
+      else this.satellite.clear();
+    }
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
@@ -337,7 +374,7 @@
     // Atmosphere halo, only worth drawing when the limb is on screen.
     if (R < this.halfDiagonal() * 1.4) {
       var halo = ctx.createRadialGradient(cx, cy, R * 0.96, cx, cy, R * 1.13);
-      halo.addColorStop(0, 'rgba(96,158,214,0.30)');
+      halo.addColorStop(0, satellite ? 'rgba(120,180,235,0.38)' : 'rgba(96,158,214,0.30)');
       halo.addColorStop(1, 'rgba(96,158,214,0)');
       ctx.fillStyle = halo;
       ctx.beginPath();
@@ -345,20 +382,24 @@
       ctx.fill();
     }
 
-    // Ocean.
-    var sea = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.35, R * 0.05, cx, cy, R);
-    sea.addColorStop(0, THEME.oceanRim);
-    sea.addColorStop(1, THEME.ocean);
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.fillStyle = sea;
-    ctx.fill();
+    if (!satellite) {
+      // Ocean.
+      var sea = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.35, R * 0.05, cx, cy, R);
+      sea.addColorStop(0, THEME.oceanRim);
+      sea.addColorStop(1, THEME.ocean);
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fillStyle = sea;
+      ctx.fill();
+    }
 
     ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.clip();
 
-    this._drawGraticule(ctx);
-    this._drawLand(ctx);
+    this._drawGraticule(ctx, satellite);
+    this._drawLand(ctx, satellite);
 
     ctx.restore();
 
@@ -373,13 +414,13 @@
     this._drawMarkers(ctx);
   };
 
-  Globe.prototype._drawGraticule = function (ctx) {
+  Globe.prototype._drawGraticule = function (ctx, satellite) {
     var step = this.zoom > 8 ? 5 : this.zoom > 3 ? 10 : 15;
     var out = this._scratch;
     var lon, lat;
 
     ctx.lineWidth = 1;
-    ctx.strokeStyle = THEME.graticule;
+    ctx.strokeStyle = satellite ? THEME.satGraticule : THEME.graticule;
     ctx.beginPath();
     for (lon = -180; lon < 180; lon += step) {
       this._polyline(ctx, function (i) {
@@ -395,7 +436,7 @@
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.strokeStyle = THEME.equator;
+    ctx.strokeStyle = satellite ? THEME.satEquator : THEME.equator;
     this._polyline(ctx, function (i) { return [-180 + i * 3, 0]; }, 121, out);
     ctx.stroke();
   };
@@ -421,7 +462,7 @@
     return this._useHighDetail;
   };
 
-  Globe.prototype._drawLand = function (ctx) {
+  Globe.prototype._drawLand = function (ctx, satellite) {
     var world = MT.world.load();
     var rings = this._wantHighDetail() ? world.high : world.low;
     var cam = this.camera;
@@ -498,14 +539,16 @@
       ctx.closePath();
     }
 
-    var lit = ctx.createRadialGradient(cx - R * 0.32, cy - R * 0.36, R * 0.04, cx, cy, R * 1.05);
-    lit.addColorStop(0, THEME.landLit);
-    lit.addColorStop(1, THEME.land);
-    ctx.fillStyle = lit;
-    ctx.fill('evenodd');
+    if (!satellite) {
+      var lit = ctx.createRadialGradient(cx - R * 0.32, cy - R * 0.36, R * 0.04, cx, cy, R * 1.05);
+      lit.addColorStop(0, THEME.landLit);
+      lit.addColorStop(1, THEME.land);
+      ctx.fillStyle = lit;
+      ctx.fill('evenodd');
+    }
 
-    ctx.lineWidth = this.zoom > 6 ? 0.9 : 0.6;
-    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = satellite ? (this.zoom > 6 ? 1.1 : 0.8) : (this.zoom > 6 ? 0.9 : 0.6);
+    ctx.strokeStyle = satellite ? THEME.satBorder : THEME.border;
     ctx.stroke();
   };
 

@@ -136,6 +136,18 @@ body {
 }
 .globe:active { cursor: grabbing; }
 
+/* The imagery sits underneath; all input lands on the 2D overlay above it. */
+.globe--gl {
+  pointer-events: none;
+  cursor: default;
+}
+
+.icon-btn--on {
+  color: var(--accent);
+  border-color: rgba(95, 214, 160, 0.5);
+  background: rgba(95, 214, 160, 0.12);
+}
+
 /* ---------------------------- prompt ----------------------------- */
 .prompt {
   position: absolute;

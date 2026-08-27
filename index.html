@@ -29,6 +29,7 @@
   </header>
 
   <main class="stage">
+    <canvas id="globeGL" class="globe globe--gl" aria-hidden="true"></canvas>
     <canvas id="globe" class="globe" aria-label="Interactive globe. Drag to rotate, scroll to zoom, tap to guess."></canvas>
 
     <div class="prompt" id="prompt" hidden>
@@ -44,6 +45,7 @@
       <button class="icon-btn" id="btnZoomIn" type="button" aria-label="Zoom in">+</button>
       <button class="icon-btn" id="btnZoomOut" type="button" aria-label="Zoom out">−</button>
       <button class="icon-btn" id="btnReset" type="button" aria-label="Reset view" title="Reset view">⤾</button>
+      <button class="icon-btn" id="btnStyle" type="button" aria-label="Map style" title="Map style">🛰</button>
     </div>
 
     <div class="actionbar" id="actionbar" hidden>
@@ -82,6 +84,7 @@
 <script src="js/geo.js"></script>
 <script src="js/rng.js"></script>
 <script src="js/worlddata.js"></script>
+<script src="js/satellite.js"></script>
 <script src="js/globe.js"></script>
 <script src="js/puzzle.js"></script>
 <script src="js/storage.js"></script>
