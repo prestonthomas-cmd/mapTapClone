@@ -25,17 +25,18 @@ so it works straight off the filesystem with no server at all.
   A perfect game is **1000**.
 
 ```
-score = 100 / (1 + (km / 1500) ^ 1.6)
+score = 100 / (1 + (km / 2000) ^ 1.5)
 ```
 
 | you were | score | |
 | --- | --- | --- |
 | within 50 km | **100** | right city |
-| 250 km | 95 | right region |
-| 500 km | 85 | right country |
-| 1 500 km | 50 | half marks |
-| 3 000 km | 25 | right continent |
-| 8 000 km+ | <10 | wrong continent |
+| 250 km | 96 | right region |
+| 500 km | 89 | right country |
+| 1 000 km | 74 | right corner of the continent |
+| 2 000 km | 50 | half marks |
+| 3 000 km | 35 | right continent |
+| 8 000 km+ | ~10 | wrong continent |
 
 The curve is deliberately flat near zero and steepest through the middle. A plain
 exponential decay reads wrong to players: it punishes a near miss about as steeply as a
@@ -140,10 +141,18 @@ Three things keep it at 60 fps with ~100k outline vertices:
 
 Worst-case settled frame at 1280×810 @2x measured 8 ms; dragging holds 60 fps.
 
-**Difficulty tiers** come from a blend of population, capital status, a curated list of
-places most players can place without hesitation, and a penalty for countries small enough
-that a near miss still costs you. Round 1 draws from the 80 easiest, round 5 from the 840
-hardest — which is where the island capitals live.
+**The city pool** is deliberately small — about 500 places — because every entry has to be
+one a player could reasonably attempt. An ordinary city of 200 000 is not a hard question,
+it is an unanswerable one: nobody can place Kultali or Dadukou, and rounds 3–5 carry 80% of
+the scoring weight, so filling them with anonymous cities makes the game feel unfair rather
+than difficult. The pool is therefore national capitals, a curated list of places people
+have heard of, and cities big enough to be famous for their size — nothing else.
+
+Tiers then come from a blend of population, capital status, that curated list, and a penalty
+for countries small enough that a near miss still costs you. Round 1 draws from the 51
+easiest (London, Moscow, Mexico City); round 5 from the 144 hardest, which is where the
+island capitals live — Pitcairn, Niue, Cocos, São Tomé. Five tiers of 51/82/103/134/144 still
+give some 8 billion distinct games.
 
 ## Deployment
 

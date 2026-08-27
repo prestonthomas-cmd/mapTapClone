@@ -133,10 +133,16 @@ function buildCities() {
     });
   };
 
+  // Every entry has to be a place a player could reasonably attempt. An
+  // ordinary city of 200k is not a hard question, it is an unanswerable one -
+  // nobody can place Kultali or Dadukou, and rounds 3-5 carry 80% of the
+  // scoring weight. So the pool is capitals, places people have heard of, and
+  // cities big enough to be famous for their size. Nothing else.
+  const MEGACITY = 2500000;
   for (const city of allCities) {
-    if (city.featureCode === 'PPLC') consider(city);        // every national capital
-    else if (city.population >= 150000) consider(city);      // large cities
-    else if (isFamous(city) && city.population >= 1000) consider(city); // small but famous
+    if (city.featureCode === 'PPLC') consider(city);                     // national capitals
+    else if (isFamous(city) && city.population >= 500) consider(city);   // known by name
+    else if (city.population >= MEGACITY) consider(city);                // known by size
   }
 
   const pool = [...candidates.values()];
@@ -163,17 +169,11 @@ function buildCities() {
 
   kept.sort((a, b) => a.difficulty - b.difficulty);
 
-  // Capitals and famous places are the backbone of the pool and are always
-  // kept - several island capitals rank below the cap but make the best hard
-  // rounds. Ordinary large cities fill the remainder, best-known first.
-  const POOL_SIZE = 2000;
-  const backbone = kept.filter((c) => c.capital || c.famous);
-  const filler = kept.filter((c) => !c.capital && !c.famous)
-                     .slice(0, Math.max(0, POOL_SIZE - backbone.length));
-  const pooled = backbone.concat(filler).sort((a, b) => a.difficulty - b.difficulty);
+  const pooled = kept.slice();
 
-  // Round 1 should feel free; round 5 should hurt.
-  const SHARES = [0.04, 0.10, 0.17, 0.27, 0.42];
+  // Round 1 should feel free; round 5 should hurt - but every round should
+  // still be answerable. The hard tiers are where the island capitals live.
+  const SHARES = [0.10, 0.16, 0.20, 0.26, 0.28];
   let i = 0;
   for (let tier = 0; tier < SHARES.length; tier++) {
     const end = tier === SHARES.length - 1

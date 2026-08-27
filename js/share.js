@@ -17,16 +17,35 @@
            '?' + (mode === 'daily' ? 'd=' : 'p=') + number;
   }
 
+  /* A round per line: the proximity square plus what that round was worth.
+   *
+   * Deliberately no city names. Everyone playing a given number gets the same
+   * five cities, so naming them in a message you send before your friends have
+   * played hands them the answers - the same reason Wordle shares are squares
+   * rather than letters. The on-screen breakdown names them, with distances. */
   function buildText(game, results) {
     var total = results.reduce(function (s, r) { return s + r.points; }, 0);
-    var squares = results.map(function (r) { return SQUARES[MT.puzzle.band(r.base)]; }).join('');
+    var width = results.reduce(function (w, r) {
+      return Math.max(w, String(r.points).length);
+    }, 0);
+
     var lines = [
       'MapTap Clone — ' + gameLabel(game.mode, game.number),
       total + '/' + MT.puzzle.MAX_SCORE + '  ' + MT.puzzle.grade(total),
-      squares
+      ''
     ];
+    results.forEach(function (r) {
+      var pts = String(r.points);
+      while (pts.length < width) pts = ' ' + pts;
+      lines.push(SQUARES[MT.puzzle.band(r.base)] + ' ' + pts +
+                 (r.multiplier > 1 ? '  ×' + r.multiplier : ''));
+    });
+
     var link = linkFor(game.mode, game.number);
-    if (link) lines.push(link);
+    if (link) {
+      lines.push('');
+      lines.push(link);
+    }
     return lines.join('\n');
   }
 

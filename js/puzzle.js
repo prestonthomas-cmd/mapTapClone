@@ -5,8 +5,8 @@
   var ROUNDS = 5;
   var MULTIPLIERS = [1, 1, 2, 3, 3];        // sums to 10 -> 1000 points a game
   var MAX_SCORE = 1000;
-  var HALF_MARKS_KM = 1500;                 // the distance worth exactly 50
-  var FALLOFF = 1.6;                        // >1 keeps near misses cheap
+  var HALF_MARKS_KM = 2000;                 // the distance worth exactly 50
+  var FALLOFF = 1.5;                        // >1 keeps near misses cheap
   var BULLSEYE_KM = 50;                     // found the city, take the 100
 
   /* Day 1 is the day the clone went live. Games are numbered from there. */
@@ -102,7 +102,7 @@
    * ------------------------------------------------------------------ */
   /* 0-100 per round, before the round multiplier.
    *
-   *     score = 100 / (1 + (km / 1500) ^ 1.6)
+   *     score = 100 / (1 + (km / 2000) ^ 1.5)
    *
    * A plain exponential decay reads wrong to players: it punishes a near miss
    * about as steeply as a wild one, so landing in the right city still costs
@@ -111,11 +111,13 @@
    * which matches how people actually judge a guess:
    *
    *   right city   (<50 km)     100      you found it
-   *   right region (~250 km)     95
-   *   right country(~500 km)     85
-   *   half marks   (1500 km)     50
-   *   right continent (~3000)    25
-   *   wrong continent (8000+)     6      and fading to nothing
+   *   right region (~250 km)     96
+   *   right country(~500 km)     89
+   *   right neighbourhood of the
+   *     world (~1000 km)         74
+   *   half marks   (2000 km)     50
+   *   right continent (~3000)    35
+   *   wrong continent (8000+)    11      and fading to nothing
    *
    * It also puts a strong game in the 900s, which is where MapTap's own
    * players describe a good score sitting.
