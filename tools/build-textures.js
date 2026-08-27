@@ -33,23 +33,62 @@ const DEFAULT_MAX_WIDTH = 8192;
 const maxArg = process.argv.find((a) => a.startsWith('--max='));
 const MAX_WIDTH = maxArg ? Number(maxArg.split('=')[1]) : DEFAULT_MAX_WIDTH;
 
-/* Any image dropped in tools/source/ wins - no renaming needed, so a file
- * straight off NASA (world.topo.bathy.200407.3x21600x10800.jpg and friends)
- * can be used as downloaded. */
+/* Any image dropped in tools/source/ wins - no renaming needed, so files
+ * straight off NASA can be used as downloaded.
+ *
+ * A single 2:1 image is used directly. Several images are treated as a tile
+ * grid: NASA publishes the full-resolution Blue Marble as eight 5400x5400
+ * tiles named A1..D2, where the letter is the column running west to east and
+ * the digit is the row running north to south. A1 is the northwest corner.
+ */
 function findSource() {
-  if (fs.existsSync(SOURCE_DIR)) {
-    const images = fs.readdirSync(SOURCE_DIR)
-      .filter((f) => /\.(jpe?g|png|webp|tiff?)$/i.test(f))
-      .sort();
-    if (images.length) {
-      if (images.length > 1) {
-        console.warn(`tools/source/ holds ${images.length} images; using ${images[0]}`);
-      }
-      return { path: path.join(SOURCE_DIR, images[0]), custom: true };
-    }
+  if (!fs.existsSync(SOURCE_DIR)) {
+    return fs.existsSync(BUNDLED) ? { tiles: [{ path: BUNDLED, col: 0, row: 0 }], cols: 1, rows: 1, custom: false } : null;
   }
-  if (fs.existsSync(BUNDLED)) return { path: BUNDLED, custom: false };
-  return null;
+  const images = fs.readdirSync(SOURCE_DIR)
+    .filter((f) => /\.(jpe?g|png|webp|tiff?)$/i.test(f))
+    .sort();
+
+  if (images.length === 0) {
+    return fs.existsSync(BUNDLED) ? { tiles: [{ path: BUNDLED, col: 0, row: 0 }], cols: 1, rows: 1, custom: false } : null;
+  }
+  if (images.length === 1) {
+    return { tiles: [{ path: path.join(SOURCE_DIR, images[0]), col: 0, row: 0 }], cols: 1, rows: 1, custom: true };
+  }
+  return asTileGrid(images);
+}
+
+/* Pulls an A1-style token off each name and turns it into grid coordinates. */
+function asTileGrid(images) {
+  const tiles = [];
+  for (const name of images) {
+    const base = name.replace(/\.[^.]+$/, '');
+    const m = base.match(/(?:^|[^A-Za-z0-9])([A-Za-z])([0-9]{1,2})(?:[^A-Za-z0-9]|$)/g);
+    if (!m) {
+      throw new Error(`Cannot tell where "${name}" sits in the grid. Tiles need an ` +
+                      `A1-style marker in the filename (letter = column west to east, ` +
+                      `digit = row north to south), as NASA names them.`);
+    }
+    // The last such token wins: "world.topo.bathy.200407.3x21600x21600.A1.jpg"
+    // has a bare "3x" earlier that must not be mistaken for the marker.
+    const last = m[m.length - 1].replace(/[^A-Za-z0-9]/g, '');
+    tiles.push({
+      path: path.join(SOURCE_DIR, name),
+      col: last[0].toUpperCase().charCodeAt(0) - 65,
+      row: parseInt(last.slice(1), 10) - 1,
+    });
+  }
+
+  const cols = Math.max(...tiles.map((t) => t.col)) + 1;
+  const rows = Math.max(...tiles.map((t) => t.row)) + 1;
+  if (tiles.length !== cols * rows) {
+    throw new Error(`Found ${tiles.length} tiles but they describe a ${cols}x${rows} grid, ` +
+                    `which needs ${cols * rows}. Some tiles are missing or misnamed.`);
+  }
+  const seen = new Set(tiles.map((t) => t.col + ',' + t.row));
+  if (seen.size !== tiles.length) throw new Error('Two tiles claim the same grid position.');
+
+  return { tiles, cols, rows, custom: true };
 }
 
 /* BMNG plates run to 21600x10800 - well past sharp's default input guard, and
@@ -67,22 +106,79 @@ const TIERS = [
   { width: 16384, quality: 76, chroma: '4:2:0', sharpen: 0.6, defer: true },
 ];
 
+/* Builds the whole plate at exactly the requested size.
+ *
+ * Each tile is resized straight to its cell rather than stitching at full
+ * resolution first - eight 5400x5400 tiles would be a 700 MB intermediate for
+ * an output we then throw most of away. Cell sizes divide exactly for every
+ * tier width, so the tiles abut with no seam, and tone and sharpening are
+ * applied to the assembled plate so they cannot differ across a tile edge.
+ */
+async function plateAt(src, width, height) {
+  if (src.tiles.length === 1) {
+    return open(src.tiles[0].path).resize(width, height, { kernel: 'lanczos3' });
+  }
+  const cellW = Math.round(width / src.cols);
+  const cellH = Math.round(height / src.rows);
+  const layers = [];
+  for (const t of src.tiles) {
+    layers.push({
+      input: await open(t.path)
+        .resize(cellW, cellH, { kernel: 'lanczos3' })
+        .removeAlpha()
+        .raw()
+        .toBuffer(),
+      raw: { width: cellW, height: cellH, channels: 3 },
+      left: t.col * cellW,
+      top: t.row * cellH,
+    });
+  }
+  return sharp({
+    create: { width: cellW * src.cols, height: cellH * src.rows, channels: 3,
+              background: { r: 0, g: 0, b: 0 } },
+  }).composite(layers);
+}
+
 (async () => {
-  const src = findSource();
+  let src;
+  try {
+    src = findSource();
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
   if (!src) {
     console.error('No source plate. Run `npm install` in tools/, or drop one at tools/source/earth.jpg');
     process.exit(1);
   }
 
-  const meta = await open(src.path).metadata();
-  console.log(`source: ${path.relative(path.join(__dirname, '..'), src.path)} ` +
-              `(${meta.width}x${meta.height})${src.custom ? '' : ' [bundled Blue Marble]'}`);
+  const root = path.join(__dirname, '..');
+  const metas = await Promise.all(src.tiles.map((t) => open(t.path).metadata()));
+
+  // Every tile must match, or the grid does not line up.
+  const tileW = metas[0].width, tileH = metas[0].height;
+  if (metas.some((m) => m.width !== tileW || m.height !== tileH)) {
+    console.error('Tiles are not all the same size:');
+    src.tiles.forEach((t, i) => console.error(`  ${path.basename(t.path)} ${metas[i].width}x${metas[i].height}`));
+    process.exit(1);
+  }
+
+  const meta = { width: tileW * src.cols, height: tileH * src.rows };
+  if (src.tiles.length === 1) {
+    console.log(`source: ${path.relative(root, src.tiles[0].path)} ` +
+                `(${meta.width}x${meta.height})${src.custom ? '' : ' [bundled Blue Marble]'}`);
+  } else {
+    console.log(`source: ${src.tiles.length} tiles in a ${src.cols}x${src.rows} grid, ` +
+                `${tileW}x${tileH} each => ${meta.width}x${meta.height}`);
+    src.tiles.slice().sort((a, b) => a.row - b.row || a.col - b.col)
+      .forEach((t) => console.log(`  [${t.col},${t.row}] ${path.basename(t.path)}`));
+  }
   if (meta.width < meta.height * 2) {
     console.warn('warning: source is not 2:1, so it is probably not a full ' +
                  'equirectangular world plate - the globe will be wrong.');
   }
   if (!src.custom) {
-    console.log('note: drop an 8K/16K equirectangular plate in tools/source/ for sharper zoom.');
+    console.log('note: drop an 8K/16K plate - or NASA\'s A1..D2 tiles - in tools/source/ for sharper zoom.');
   }
 
   fs.mkdirSync(OUT, { recursive: true });
@@ -93,7 +189,7 @@ const TIERS = [
     if (tier.width > MAX_WIDTH) continue;           // opt in with --max=
     const name = `earth-${tier.width >= 1024 ? (tier.width / 1024) + 'k' : tier.width}.jpg`;
     const dest = path.join(OUT, name);
-    let pipe = tone(open(src.path).resize(tier.width, tier.width / 2, { kernel: 'lanczos3' }));
+    let pipe = tone(await plateAt(src, tier.width, tier.width / 2));
     // A little unsharp on the big tiers pushes back against the softness of
     // magnifying a plate well past its native resolution.
     if (tier.sharpen) pipe = pipe.sharpen({ sigma: tier.sharpen });

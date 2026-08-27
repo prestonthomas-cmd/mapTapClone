@@ -118,10 +118,10 @@ that can be fetched from a sandboxed build. Magnifying it 20x inevitably softens
 To go sharper, download a bigger equirectangular plate and drop it in `tools/source/`:
 
 - [NASA Blue Marble Next Generation, topography and bathymetry](https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/base-topography-bathymetry/)
-  — the original, one plate per month. Take the largest **single-file** 2:1 image offered.
-  The very highest resolution is published as eight tiles that would need stitching first.
+  — the original, one plate per month, up to 21600x10800. Either a single 2:1 image or the
+  full-resolution **eight-tile set**; both work.
 - [Solar System Scope](https://www.solarsystemscope.com/textures/) — 8K and 16K, CC BY 4.0,
-  single files, no stitching.
+  single files.
 
 Then:
 
@@ -130,8 +130,22 @@ cp ~/Downloads/world.topo.bathy.*.jpg tools/source/
 npm run build:textures
 ```
 
-Any image in `tools/source/` is picked up, whatever it is called, so a file straight off NASA
-works as downloaded. The script never upscales, generates each tier the source can support,
+Any image in `tools/source/` is picked up, whatever it is called, so files straight off NASA
+work as downloaded.
+
+**Tiles.** Drop all eight in together and they are stitched automatically. NASA names them
+`A1`..`D2`, where the letter is the column running west to east and the digit is the row
+running north to south — so `A1` is the northwest corner and `D2` the southeast. The build
+reads that marker off the filename (ignoring the `3x21600x21600` part, which looks
+deceptively similar), checks the grid is complete and every tile the same size, and says
+plainly what is wrong when it is not.
+
+Tiles are resized straight into their cell rather than being stitched at full resolution
+first — eight 5400x5400 tiles would be a 700 MB intermediate for an output most of which is
+then thrown away. Cell sizes divide exactly at every tier width, and tone and sharpening are
+applied to the assembled plate, so no seam appears at a tile edge. This is measured, not
+assumed: across a reconstructed plate, the pixel step at each tile boundary is no larger than
+at an ordinary column 200 px away. The script never upscales, generates each tier the source can support,
 and writes `assets/plates.js` so the page only requests plates that exist. Nothing else
 changes — commit the regenerated `assets/` and push.
 
