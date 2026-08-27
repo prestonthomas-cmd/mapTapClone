@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="description" content="A daily geography game: tap the globe as close as you can to five world cities.">
+<meta name="theme-color" content="#0a1220">
+<title>MapTap Clone — daily geography</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23163454'/><circle cx='16' cy='16' r='14' fill='none' stroke='%235fd6a0' stroke-width='2'/><ellipse cx='16' cy='16' rx='6' ry='14' fill='none' stroke='%235fd6a0' stroke-width='1.5'/><path d='M2 16h28' stroke='%235fd6a0' stroke-width='1.5'/></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app" class="app">
+
+  <header class="topbar">
+    <div class="topbar__left">
+      <h1 class="wordmark">Map<span>Tap</span></h1>
+      <button id="gameChip" class="chip" type="button" title="Change game">Daily #1</button>
+    </div>
+    <div class="topbar__right">
+      <div class="scoreboard" id="scoreboard">
+        <span class="scoreboard__value" id="runningScore">0</span>
+        <span class="scoreboard__max">/ 1000</span>
+      </div>
+      <button class="icon-btn" id="btnStats" type="button" title="Stats" aria-label="Stats">◔</button>
+      <button class="icon-btn" id="btnHelp" type="button" title="How to play" aria-label="How to play">?</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <canvas id="globe" class="globe" aria-label="Interactive globe. Drag to rotate, scroll to zoom, tap to guess."></canvas>
+
+    <div class="prompt" id="prompt" hidden>
+      <div class="prompt__meta">
+        <span id="promptRound">Round 1 of 5</span>
+        <span class="prompt__mult" id="promptMult">×1</span>
+      </div>
+      <div class="prompt__city" id="promptCity">—</div>
+      <div class="prompt__country" id="promptCountry">—</div>
+    </div>
+
+    <div class="zoomstack">
+      <button class="icon-btn" id="btnZoomIn" type="button" aria-label="Zoom in">+</button>
+      <button class="icon-btn" id="btnZoomOut" type="button" aria-label="Zoom out">−</button>
+      <button class="icon-btn" id="btnReset" type="button" aria-label="Reset view" title="Reset view">⤾</button>
+    </div>
+
+    <div class="actionbar" id="actionbar" hidden>
+      <p class="actionbar__hint" id="actionHint">Tap the globe where you think it is</p>
+      <button class="btn btn--primary" id="btnSubmit" type="button" disabled>Lock in guess</button>
+    </div>
+
+    <!-- Round result -->
+    <div class="sheet" id="roundSheet" hidden>
+      <div class="sheet__row">
+        <div class="sheet__answer">
+          <div class="sheet__label">The answer was</div>
+          <div class="sheet__city" id="resultCity">—</div>
+          <div class="sheet__country" id="resultCountry">—</div>
+        </div>
+        <div class="sheet__score">
+          <div class="sheet__points" id="resultPoints">0</div>
+          <div class="sheet__breakdown" id="resultBreakdown">0 × 1</div>
+        </div>
+      </div>
+      <div class="sheet__distance" id="resultDistance">—</div>
+      <button class="btn btn--primary btn--wide" id="btnNext" type="button">Next round</button>
+    </div>
+  </main>
+
+  <!-- Start / summary screens live in a full overlay -->
+  <div class="overlay" id="overlay" hidden>
+    <div class="panel" id="panel"></div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+</div>
+
+<script src="data/world.js"></script>
+<script src="data/cities.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/rng.js"></script>
+<script src="js/worlddata.js"></script>
+<script src="js/globe.js"></script>
+<script src="js/puzzle.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/share.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

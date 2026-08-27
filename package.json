@@ -1,0 +1,11 @@
+{
+  "name": "maptap-clone",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A playable clone of the daily geography game MapTap: tap a 3D globe as close as you can to five world cities.",
+  "scripts": {
+    "start": "node server.js",
+    "build:data": "cd tools && npm install && npm run build"
+  },
+  "license": "MIT"
+}
