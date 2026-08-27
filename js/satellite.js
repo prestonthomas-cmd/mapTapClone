@@ -113,6 +113,8 @@
     this.ready = false;
     this.failed = false;
     this.resolution = 0;
+    this.maxTextureSize = 0;
+    this._deferred = null;
 
     var attrs = { alpha: true, antialias: true, depth: false, premultipliedAlpha: false };
     var gl = canvas.getContext('webgl', attrs) || canvas.getContext('experimental-webgl', attrs);
@@ -174,11 +176,33 @@
     this._basis = new Float64Array(9);
   }
 
-  /* Loads the small plate for an immediate picture, then the full one. */
+  /* Loads the small plate for an immediate picture, then progressively larger
+   * ones. Plates wider than the GPU can hold are skipped rather than failing
+   * at upload time - plenty of mobile GPUs still cap out at 4096. */
   SatelliteLayer.prototype.loadTextures = function (sources) {
+    var max = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) || 4096;
+    this.maxTextureSize = max;
+
+    var usable = (sources || []).filter(function (s) { return s.width <= max; });
+    usable.sort(function (a, b) { return a.width - b.width; });
+
+    this._deferred = usable.filter(function (s) { return s.defer; });
+    this._runChain(usable.filter(function (s) { return !s.defer; }));
+  };
+
+  /* Large plates are worth several megabytes, so they wait until the player
+   * actually zooms in far enough to see the difference. */
+  SatelliteLayer.prototype.loadDeferred = function () {
+    if (!this._deferred || !this._deferred.length) return;
+    var pending = this._deferred;
+    this._deferred = null;
+    this._runChain(pending);
+  };
+
+  SatelliteLayer.prototype._runChain = function (list) {
     var self = this;
     var chain = Promise.resolve();
-    sources.forEach(function (src) {
+    list.forEach(function (src) {
       chain = chain.then(function () { return self._loadOne(src.url, src.width); });
     });
     chain.catch(function () { /* a missing plate just leaves the last good one */ });

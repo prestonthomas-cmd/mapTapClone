@@ -5,8 +5,9 @@
   var ROUNDS = 5;
   var MULTIPLIERS = [1, 1, 2, 3, 3];        // sums to 10 -> 1000 points a game
   var MAX_SCORE = 1000;
-  var DECAY_KM = 1500;                      // half marks at ~1040 km
-  var BULLSEYE_KM = 25;                     // close enough is a clean 100
+  var HALF_MARKS_KM = 1500;                 // the distance worth exactly 50
+  var FALLOFF = 1.6;                        // >1 keeps near misses cheap
+  var BULLSEYE_KM = 50;                     // found the city, take the 100
 
   /* Day 1 is the day the clone went live. Games are numbered from there. */
   var EPOCH = { y: 2026, m: 7, d: 27 };     // 27 Aug 2026, month is 0-based
@@ -99,11 +100,30 @@
   /* ------------------------------------------------------------------ *
    * Scoring
    * ------------------------------------------------------------------ */
-  /* 0-100 per round, decaying with distance, before the round multiplier. */
+  /* 0-100 per round, before the round multiplier.
+   *
+   *     score = 100 / (1 + (km / 1500) ^ 1.6)
+   *
+   * A plain exponential decay reads wrong to players: it punishes a near miss
+   * about as steeply as a wild one, so landing in the right city still costs
+   * you marks while landing on the wrong continent is oddly well paid. This
+   * curve is deliberately flat near zero and steepest through the middle,
+   * which matches how people actually judge a guess:
+   *
+   *   right city   (<50 km)     100      you found it
+   *   right region (~250 km)     95
+   *   right country(~500 km)     85
+   *   half marks   (1500 km)     50
+   *   right continent (~3000)    25
+   *   wrong continent (8000+)     6      and fading to nothing
+   *
+   * It also puts a strong game in the 900s, which is where MapTap's own
+   * players describe a good score sitting.
+   */
   function baseScore(distanceKm) {
     if (distanceKm <= BULLSEYE_KM) return 100;
-    var v = 100 * Math.exp(-distanceKm / DECAY_KM);
-    return v < 0.5 ? 0 : Math.round(v);
+    var v = 100 / (1 + Math.pow(distanceKm / HALF_MARKS_KM, FALLOFF));
+    return v < 1 ? 0 : Math.round(v);
   }
 
   function scoreRound(round, guessLat, guessLon) {
@@ -145,6 +165,7 @@
   MT.puzzle = {
     ROUNDS: ROUNDS,
     BULLSEYE_KM: BULLSEYE_KM,
+    HALF_MARKS_KM: HALF_MARKS_KM,
     MULTIPLIERS: MULTIPLIERS,
     MAX_SCORE: MAX_SCORE,
     EPOCH: EPOCH,

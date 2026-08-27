@@ -1,41 +1,91 @@
 #!/usr/bin/env node
 /*
- * Generates assets/earth-1k.jpg and assets/earth-4k.jpg from NASA's Blue Marble
- * Next Generation plate (public domain), shipped inside the three-globe package.
+ * Generates the satellite plates in assets/, plus assets/plates.js listing
+ * what was produced so the page only ever requests files that exist.
  *
- * Two sizes: the small one paints almost immediately, the large one replaces it
- * once decoded.
+ * Source, in order of preference:
+ *   1. tools/source/earth.(jpg|png)  - drop your own plate here
+ *   2. NASA Blue Marble Next Generation at 4096x2048, bundled with three-globe
+ *
+ * The bundled plate is the highest resolution available offline. For sharper
+ * imagery when zoomed in, download an 8K or 16K equirectangular Earth (Solar
+ * System Scope publishes CC BY 4.0 ones, NASA Visible Earth the originals),
+ * save it as tools/source/earth.jpg and re-run this script - the extra tiers
+ * are generated and wired up automatically.
  */
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 
-// three-globe's "exports" map does not expose its example assets, so the file
-// is reached through node_modules directly rather than via require.resolve.
-const SRC = path.join(__dirname, 'node_modules', 'three-globe',
-                      'example', 'img', 'earth-blue-marble.jpg');
 const OUT = path.join(__dirname, '..', 'assets');
+const SOURCE_DIR = path.join(__dirname, 'source');
+const BUNDLED = path.join(__dirname, 'node_modules', 'three-globe',
+                          'example', 'img', 'earth-blue-marble.jpg');
 
 // The renderer darkens the limb, and the raw plate reads very dark once that
 // is applied on top of a dark page.
 const tone = (img) => img.modulate({ brightness: 1.10, saturation: 1.14 }).linear(1.04, -4);
 
-const SIZES = [
-  { name: 'earth-4k.jpg', width: 4096, quality: 82, chroma: '4:4:4' },
-  { name: 'earth-1k.jpg', width: 1024, quality: 80, chroma: '4:2:0' },
+function findSource() {
+  for (const name of ['earth.jpg', 'earth.jpeg', 'earth.png', 'earth.webp']) {
+    const p = path.join(SOURCE_DIR, name);
+    if (fs.existsSync(p)) return { path: p, custom: true };
+  }
+  if (fs.existsSync(BUNDLED)) return { path: BUNDLED, custom: false };
+  return null;
+}
+
+/* Only widths the source can actually support are emitted - upscaling would
+ * add bytes and no detail. */
+const TIERS = [
+  { width: 1024, quality: 80, chroma: '4:2:0', sharpen: 0,   defer: false },
+  { width: 4096, quality: 82, chroma: '4:4:4', sharpen: 0.7, defer: false },
+  { width: 8192, quality: 78, chroma: '4:2:0', sharpen: 0.7, defer: true },
+  { width: 16384, quality: 76, chroma: '4:2:0', sharpen: 0.6, defer: true },
 ];
 
 (async () => {
-  if (!fs.existsSync(SRC)) {
-    console.error('Source plate not found at ' + SRC + '\nRun `npm install` in tools/ first.');
+  const src = findSource();
+  if (!src) {
+    console.error('No source plate. Run `npm install` in tools/, or drop one at tools/source/earth.jpg');
     process.exit(1);
   }
+
+  const meta = await sharp(src.path).metadata();
+  console.log(`source: ${path.relative(path.join(__dirname, '..'), src.path)} ` +
+              `(${meta.width}x${meta.height})${src.custom ? '' : ' [bundled Blue Marble]'}`);
+
   fs.mkdirSync(OUT, { recursive: true });
-  for (const s of SIZES) {
-    const dest = path.join(OUT, s.name);
-    await tone(sharp(SRC).resize(s.width, s.width / 2, { kernel: 'lanczos3' }))
-      .jpeg({ quality: s.quality, mozjpeg: true, chromaSubsampling: s.chroma })
-      .toFile(dest);
-    console.log(`${s.name.padEnd(14)} ${s.width}x${s.width / 2}  ${(fs.statSync(dest).size / 1024).toFixed(0)} KB`);
+
+  const produced = [];
+  for (const tier of TIERS) {
+    if (tier.width > meta.width) continue;          // never upscale
+    const name = `earth-${tier.width >= 1024 ? (tier.width / 1024) + 'k' : tier.width}.jpg`;
+    const dest = path.join(OUT, name);
+    let pipe = tone(sharp(src.path).resize(tier.width, tier.width / 2, { kernel: 'lanczos3' }));
+    // A little unsharp on the big tiers pushes back against the softness of
+    // magnifying a plate well past its native resolution.
+    if (tier.sharpen) pipe = pipe.sharpen({ sigma: tier.sharpen });
+    await pipe.jpeg({ quality: tier.quality, mozjpeg: true, chromaSubsampling: tier.chroma })
+              .toFile(dest);
+    const kb = fs.statSync(dest).size / 1024;
+    produced.push({ url: 'assets/' + name, width: tier.width, defer: tier.defer });
+    console.log(`  ${name.padEnd(14)} ${tier.width}x${tier.width / 2}  ${kb.toFixed(0)} KB` +
+                (tier.defer ? '  (loaded on zoom)' : ''));
   }
+
+  // Remove tiers from a previous, larger source so the page never 404s.
+  for (const f of fs.readdirSync(OUT)) {
+    if (/^earth-\d+k\.jpg$/.test(f) && !produced.some((p) => p.url.endsWith(f))) {
+      fs.unlinkSync(path.join(OUT, f));
+      console.log(`  removed stale ${f}`);
+    }
+  }
+
+  const js =
+    '/* Generated by tools/build-textures.js - do not edit by hand.\n' +
+    '   Satellite plates available to the page, smallest first. */\n' +
+    'window.MT_PLATES = ' + JSON.stringify(produced) + ';\n';
+  fs.writeFileSync(path.join(OUT, 'plates.js'), js);
+  console.log(`  plates.js      ${produced.length} tier(s)`);
 })();

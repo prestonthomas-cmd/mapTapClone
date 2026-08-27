@@ -18,9 +18,8 @@
     answer: '#5fd6a0',
     arc: 'rgba(244,162,89,0.85)',
     pin: '#ffd166',
-    satBorder: 'rgba(255,255,255,0.30)',
-    satGraticule: 'rgba(255,255,255,0.09)',
-    satEquator: 'rgba(255,255,255,0.18)'
+    satGraticule: 'rgba(255,255,255,0.055)',
+    satEquator: 'rgba(255,255,255,0.11)'
   };
 
   var MAX_ZOOM = 45;
@@ -97,9 +96,12 @@
     this.requestRender();
   };
 
+  var DEFERRED_PLATE_ZOOM = 2.5;
+
   Globe.prototype.setZoom = function (z) {
     this.zoom = geo.clamp(z, 1, MAX_ZOOM);
     this.camera.radius = this.baseRadius * this.zoom;
+    if (this.satellite && this.zoom >= DEFERRED_PLATE_ZOOM) this.satellite.loadDeferred();
     this.requestRender();
   };
 
@@ -399,7 +401,9 @@
     ctx.clip();
 
     this._drawGraticule(ctx, satellite);
-    this._drawLand(ctx, satellite);
+    // Satellite view is the imagery alone. Coastlines are already visible in
+    // the plate, and country borders are not on the real planet.
+    if (!satellite) this._drawLand(ctx);
 
     ctx.restore();
 
@@ -462,7 +466,7 @@
     return this._useHighDetail;
   };
 
-  Globe.prototype._drawLand = function (ctx, satellite) {
+  Globe.prototype._drawLand = function (ctx) {
     var world = MT.world.load();
     var rings = this._wantHighDetail() ? world.high : world.low;
     var cam = this.camera;
@@ -539,16 +543,14 @@
       ctx.closePath();
     }
 
-    if (!satellite) {
-      var lit = ctx.createRadialGradient(cx - R * 0.32, cy - R * 0.36, R * 0.04, cx, cy, R * 1.05);
-      lit.addColorStop(0, THEME.landLit);
-      lit.addColorStop(1, THEME.land);
-      ctx.fillStyle = lit;
-      ctx.fill('evenodd');
-    }
+    var lit = ctx.createRadialGradient(cx - R * 0.32, cy - R * 0.36, R * 0.04, cx, cy, R * 1.05);
+    lit.addColorStop(0, THEME.landLit);
+    lit.addColorStop(1, THEME.land);
+    ctx.fillStyle = lit;
+    ctx.fill('evenodd');
 
-    ctx.lineWidth = satellite ? (this.zoom > 6 ? 1.1 : 0.8) : (this.zoom > 6 ? 0.9 : 0.6);
-    ctx.strokeStyle = satellite ? THEME.satBorder : THEME.border;
+    ctx.lineWidth = this.zoom > 6 ? 0.9 : 0.6;
+    ctx.strokeStyle = THEME.border;
     ctx.stroke();
   };
 

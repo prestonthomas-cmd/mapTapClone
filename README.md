@@ -23,10 +23,25 @@ so it works straight off the filesystem with no server at all.
 - **Five rounds**, each harder than the last.
 - Each round scores **0–100** by distance, then a round multiplier: **×1, ×1, ×2, ×3, ×3**.
   A perfect game is **1000**.
-- Within 25 km is a clean 100. Roughly: 100 km → 94, 500 km → 72, 1000 km → 51,
-  2000 km → 26, past 5000 km there is nothing left.
 
-Scores decay as `100 · e^(−km/1500)`.
+```
+score = 100 / (1 + (km / 1500) ^ 1.6)
+```
+
+| you were | score | |
+| --- | --- | --- |
+| within 50 km | **100** | right city |
+| 250 km | 95 | right region |
+| 500 km | 85 | right country |
+| 1 500 km | 50 | half marks |
+| 3 000 km | 25 | right continent |
+| 8 000 km+ | <10 | wrong continent |
+
+The curve is deliberately flat near zero and steepest through the middle. A plain
+exponential decay reads wrong to players: it punishes a near miss about as steeply as a
+wild one, so landing in the right city still costs you marks while landing on the wrong
+continent is oddly well paid. This shape puts a strong game in the 900s, which is where
+MapTap's own players put a good score.
 
 ## Game numbers
 
@@ -68,7 +83,8 @@ js/share.js         the copy-and-paste result block
 js/app.js           screen flow and DOM
 data/world.js       generated country polygons
 data/cities.js      generated city pool
-assets/earth-*.jpg  satellite plates (1k placeholder, 4k full)
+assets/earth-*.jpg  satellite plates, smallest first
+assets/plates.js    generated list of which plates exist
 tools/build-data.js regenerates both data files
 tools/build-textures.js regenerates the satellite plates
 server.js           zero-dependency static server
@@ -89,9 +105,19 @@ The plate loads in two steps: a 75 KB 1024x512 version paints almost immediately
 the vector globe stands in, so there is never an empty disc. The 🛰 button switches between
 the two views and the choice is remembered.
 
-Country outlines stay vector even in satellite view. Imagery inevitably goes soft when you
-magnify a 4096-pixel-wide plate 20x, so the crisp overlay is what carries the precision when
-you are placing a pin.
+Satellite view shows the imagery alone — no country borders, since they are not on the real
+planet, and coastlines are already legible in the plate. The outline style (the 🛰 button)
+keeps them for when you want them.
+
+**Raising the imagery resolution.** The bundled plate is 4096x2048, which is the largest
+that ships with `three-globe` and the best available offline. Magnifying it 20x inevitably
+softens it. To go sharper, download an 8K or 16K equirectangular Earth — [Solar System
+Scope](https://www.solarsystemscope.com/textures/) publishes CC BY 4.0 ones, [NASA Visible
+Earth](https://visibleearth.nasa.gov/collection/1484/blue-marble) the originals — save it as
+`tools/source/earth.jpg` and run `npm run build:textures`. The extra tiers are generated,
+listed in `assets/plates.js` and picked up automatically; nothing else needs changing.
+Plates above 4096 wide are fetched only once you zoom past 2.5x, and are skipped entirely on
+GPUs whose `MAX_TEXTURE_SIZE` cannot hold them.
 
 **The globe** is a real orthographic projection rather than an image or a map library.
 Dragging changes the geographic point at the centre of the disc; a tap is unprojected back
