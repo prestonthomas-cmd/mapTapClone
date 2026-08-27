@@ -89,6 +89,7 @@ const RENAME = {
   'New York City': 'New York', 'Washington, D. C.': 'Washington, D.C.',
   'Washington': 'Washington, D.C.', 'Habana': 'Havana', 'La Habana': 'Havana',
   'Ciudad de Mexico': 'Mexico City', 'Sao Paulo': 'Sao Paulo',
+  'Palikir - National Government Center': 'Palikir',
 };
 
 const famousKeys = new Set(FAMOUS);

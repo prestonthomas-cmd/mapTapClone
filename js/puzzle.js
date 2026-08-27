@@ -39,7 +39,10 @@
     tiers = [[], [], [], [], []];
     for (var i = 0; i < data.cities.length; i++) {
       var c = data.cities[i];
-      tiers[c[4] - 1].push({ name: c[0], cc: c[1], lat: c[2], lon: c[3], tier: c[4] });
+      // `rank` is the city's position in the pool, hardest last. Tiers are
+      // contiguous rank bands, so it doubles as an absolute difficulty score
+      // that is comparable across tier boundaries.
+      tiers[c[4] - 1].push({ name: c[0], cc: c[1], lat: c[2], lon: c[3], tier: c[4], rank: i });
     }
     return tiers;
   }
@@ -54,6 +57,14 @@
     return 'maptap-clone|v1|' + mode + '|' + number;
   }
 
+  /* Tiers are adjacent rank bands, so a round can sit a handful of ranks above
+   * the last one and the game stops feeling like it is getting harder - a
+   * round 2 of San Jose followed by a round 3 of Port Moresby, five ranks
+   * apart, or a round 5 of Zurich at triple points. Requiring a real step
+   * between consecutive rounds keeps the ramp honest. It is a preference, not
+   * a rule: like the other constraints it relaxes if the draw is awkward. */
+  var MIN_RANK_STEP = 45;
+
   function generate(mode, number) {
     var pools = indexCities();
     var rand = MT.rng.create(seedFor(mode, number));
@@ -67,7 +78,9 @@
       for (var attempt = 0; attempt < 60; attempt++) {
         var cand = pool[rand.int(pool.length)];
         var ok = true;
-        for (var j = 0; j < chosen.length; j++) {
+        if (attempt < 45 && chosen.length &&
+            cand.rank - chosen[chosen.length - 1].rank < MIN_RANK_STEP) ok = false;
+        for (var j = 0; ok && j < chosen.length; j++) {
           var prev = chosen[j];
           if (prev.name === cand.name && prev.cc === cand.cc) { ok = false; break; }
           if (attempt < 40 && prev.cc === cand.cc) { ok = false; break; }
