@@ -124,12 +124,22 @@ hardest — which is where the island capitals live.
 Pushing to `main` triggers `.github/workflows/pages.yml`, which publishes the repository
 root as-is. There is no build step — the deployed files are exactly the files in the repo.
 
-**One-time setup:** GitHub Pages has to be turned on by the repository owner before the
-workflow can deploy. Creating a Pages site is an owner-level action, so the workflow's own
-token cannot do it — the first run fails with
-`Create Pages site failed: Resource not accessible by integration` until it is done.
+**One-time setup.** Two repository settings have to be right before the workflow can
+deploy. Neither can be done by the workflow's own token — both are owner-level actions.
 
-> Settings → Pages → **Build and deployment → Source: GitHub Actions**
+1. **Turn Pages on.** Settings → Pages → *Build and deployment* → **Source: GitHub Actions**.
+   Until this is done the run fails with
+   `Create Pages site failed: Resource not accessible by integration`.
+
+2. **Make `main` the default branch.** Settings → General → *Default branch* → switch to
+   **main**. Enabling Pages creates a `github-pages` environment whose protection rule only
+   permits the **default branch** to deploy, so if the default is still some other branch the
+   run is rejected before it executes a single step — the job shows a one-second failure with
+   no logs, and the UI says *"Branch main is not allowed to deploy to github-pages due to
+   environment protection rules."*
+
+   (Alternatively, leave the default alone and add `main` under Settings → Environments →
+   `github-pages` → *Deployment branches*. Changing the default is tidier.)
 
 Then re-run the workflow (Actions → *Deploy to GitHub Pages* → **Run workflow**), or just
 push again. After that the site is at
