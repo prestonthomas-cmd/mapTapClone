@@ -13,7 +13,7 @@ const path = require('path');
 const topojson = require('topojson-client');
 const allCities = require('all-the-cities');
 const countries = require('world-countries');
-const FAMOUS = require('./famous-cities');
+const { household: HOUSEHOLD, known: KNOWN } = require('./famous-cities');
 
 const OUT = path.join(__dirname, '..', 'data');
 const PRECISION = 1000; // coordinate quantisation: 0.001 deg ~= 110 m
@@ -92,12 +92,31 @@ const RENAME = {
   'Palikir - National Government Center': 'Palikir',
 };
 
-const famousKeys = new Set(FAMOUS);
+const householdKeys = new Set(HOUSEHOLD);
+const knownKeys = new Set(KNOWN);
 const countryByAlpha2 = new Map(countries.map((c) => [c.cca2, c]));
 
-function isFamous(city) {
-  return famousKeys.has(`${city.name}|${city.country}`) ||
-         famousKeys.has(`${RENAME[city.name] || city.name}|${city.country}`);
+function inList(set, city) {
+  return set.has(`${city.name}|${city.country}`) ||
+         set.has(`${RENAME[city.name] || city.name}|${city.country}`);
+}
+
+/* 2 = everyone can place it, 1 = widely heard of, 0 = neither. */
+function familiarity(city) {
+  if (inList(householdKeys, city)) return 2;
+  if (inList(knownKeys, city)) return 1;
+  return 0;
+}
+
+/* Dependencies and overseas territories fill the hard end with trivia rather
+ * than geography - Pitcairn has forty residents, South Georgia about twenty.
+ * Sovereign states are the game; a few territories are famous enough to earn
+ * their place alongside them. */
+const KEEP_TERRITORIES = new Set(['HK', 'MO', 'PR', 'GL', 'BM', 'GI', 'FO', 'IM',
+                                  'AW', 'CW', 'KY', 'PF', 'NC', 'GU', 'TW', 'PS', 'XK']);
+
+function isEligibleCountry(meta) {
+  return meta.unMember || KEEP_TERRITORIES.has(meta.cca2);
 }
 
 // A country's size drives how punishing a miss is: a capital on a 20 km island
@@ -117,6 +136,7 @@ function buildCities() {
   const consider = (city) => {
     const meta = countryByAlpha2.get(city.country);
     if (!meta) return;
+    if (!isEligibleCountry(meta)) return;
     if (!city.loc || !city.loc.coordinates) return;
     const name = RENAME[city.name] || city.name;
     const key = `${name}|${city.country}`;
@@ -129,7 +149,7 @@ function buildCities() {
       lat: city.loc.coordinates[1],
       pop: city.population,
       capital: city.featureCode === 'PPLC',
-      famous: isFamous(city),
+      familiarity: familiarity(city),
       meta,
     });
   };
@@ -142,7 +162,7 @@ function buildCities() {
   const MEGACITY = 2500000;
   for (const city of allCities) {
     if (city.featureCode === 'PPLC') consider(city);                     // national capitals
-    else if (isFamous(city) && city.population >= 500) consider(city);   // known by name
+    else if (familiarity(city) && city.population >= 500) consider(city); // known by name
     else if (city.population >= MEGACITY) consider(city);                // known by size
   }
 
@@ -160,11 +180,15 @@ function buildCities() {
     if (!dup) kept.push(c);
   }
 
+  // Recognisability dominates. Population is kept only as a tiebreaker within a
+  // grade: weighting it heavily is what used to rank Kinshasa above Rome and
+  // leave New York out of the easiest tier altogether, because it is a capital
+  // of nowhere and merely the size of a capital.
   for (const c of kept) {
     const fame =
-      1.05 * Math.log10(Math.max(1000, c.pop)) +
-      (c.famous ? 3.0 : 0) +
-      (c.capital ? (c.meta.unMember ? 1.7 : 0.7) : 0);
+      0.55 * Math.log10(Math.max(1000, c.pop)) +
+      [0, 3.0, 6.0][c.familiarity] +
+      (c.capital ? (c.meta.unMember ? 1.2 : 0.5) : 0);
     c.difficulty = tapPenalty(c.meta.area) - fame;
   }
 

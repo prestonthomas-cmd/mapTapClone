@@ -25,24 +25,23 @@ so it works straight off the filesystem with no server at all.
   A perfect game is **1000**.
 
 ```
-score = 100 / (1 + (km / 2000) ^ 1.5)
+score = 100 / (1 + (km / 3000) ^ 2)
 ```
 
 | you were | score | |
 | --- | --- | --- |
 | within 50 km | **100** | right city |
-| 250 km | 96 | right region |
-| 500 km | 89 | right country |
-| 1 000 km | 74 | right corner of the continent |
-| 2 000 km | 50 | half marks |
-| 3 000 km | 35 | right continent |
-| 8 000 km+ | ~10 | wrong continent |
+| 250 km | 99 | still the right area |
+| 500 km | 97 | right country |
+| 1 000 km | 90 | |
+| 2 000 km | 69 | |
+| 3 000 km | 50 | half marks |
+| 8 000 km+ | ~12 | wrong part of the planet |
 
-The curve is deliberately flat near zero and steepest through the middle. A plain
-exponential decay reads wrong to players: it punishes a near miss about as steeply as a
-wild one, so landing in the right city still costs you marks while landing on the wrong
-continent is oddly well paid. This shape puts a strong game in the 900s, which is where
-MapTap's own players put a good score.
+Squaring gives a plateau rather than a slope. On a globe, being a little wrong still means
+you knew where the place was, so landing in the right country should cost a couple of points
+rather than a fifth of the round. The fall comes later, once a guess is genuinely in the
+wrong part of the world.
 
 ## Game numbers
 
@@ -190,18 +189,27 @@ Three things keep it at 60 fps with ~100k outline vertices:
 
 Worst-case settled frame at 1280×810 @2x measured 8 ms; dragging holds 60 fps.
 
-**The city pool** is deliberately small — about 500 places — because every entry has to be
+**The city pool** is deliberately small — about 480 places — because every entry has to be
 one a player could reasonably attempt. An ordinary city of 200 000 is not a hard question,
 it is an unanswerable one: nobody can place Kultali or Dadukou, and rounds 3–5 carry 80% of
 the scoring weight, so filling them with anonymous cities makes the game feel unfair rather
-than difficult. The pool is therefore national capitals, a curated list of places people
-have heard of, and cities big enough to be famous for their size — nothing else.
+than difficult. The pool is national capitals, a curated list of places people have heard
+of, and cities big enough to be famous for their size — restricted to sovereign states plus
+a handful of well-known territories. Dependencies fill the hard end with trivia rather than
+geography: Pitcairn has forty residents and South Georgia about twenty.
 
-Tiers then come from a blend of population, capital status, that curated list, and a penalty
-for countries small enough that a near miss still costs you. Round 1 draws from the 51
-easiest (London, Moscow, Mexico City); round 5 from the 144 hardest, which is where the
-island capitals live — Pitcairn, Niue, Cocos, São Tomé. Five tiers of 51/82/103/134/144 still
-give some 8 billion distinct games.
+**Recognisability, not population, sets the order.** Population is a poor proxy for whether
+a player can place a city — Kinshasa has more people than Rome, and São Paulo more than New
+York, but that is not how the difficulty of a geography question works. Ranking on
+population put Conakry and Mogadishu in round one and left New York out of it entirely.
+`tools/famous-cities.js` therefore carries two graded lists — places a general audience can
+place without hesitation, and places they have merely heard of — and those dominate the
+ranking, with population left as a tiebreaker and a penalty for countries small enough that
+a near miss still costs you.
+
+Round 1 now draws from the 48 easiest (London, Paris, New York, Tokyo, Sydney); round 5 from
+the 136 hardest, which is where the small island states live — Tonga, Cape Verde, Vanuatu,
+São Tomé. Five tiers of 48/77/96/125/136 still give some 6 billion distinct games.
 
 ## Deployment
 

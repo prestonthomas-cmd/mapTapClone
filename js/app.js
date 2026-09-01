@@ -122,13 +122,15 @@
         '<li>Later rounds are worth more: <strong>×1, ×1, ×2, ×3, ×3</strong> — a perfect game is <strong>1000</strong>.</li>' +
       '</ol>' +
       '<h3>Scoring</h3>' +
-      '<p>Near misses are cheap; wild ones are not.</p>' +
+      '<p>Being a little wrong costs almost nothing. Being in the wrong part ' +
+        'of the world costs everything.</p>' +
       '<ul>' +
-        '<li>Right city, within 50 km — a clean <strong>100</strong></li>' +
-        '<li>Right region, 250 km — about <strong>95</strong></li>' +
-        '<li>Right country, 500 km — about <strong>85</strong></li>' +
-        '<li>1500 km — half marks, <strong>50</strong></li>' +
-        '<li>Wrong continent — single figures</li>' +
+        '<li>Within 50 km — a clean <strong>100</strong></li>' +
+        '<li>250 km — <strong>99</strong></li>' +
+        '<li>Right country, 500 km — <strong>97</strong></li>' +
+        '<li>1000 km — <strong>90</strong></li>' +
+        '<li>3000 km — half marks, <strong>50</strong></li>' +
+        '<li>Wrong part of the planet — single figures</li>' +
       '</ul>' +
       '<h3>Daily and practice</h3>' +
       '<p>Every game has a number. <strong>Daily #' + puzzle.todayNumber() + '</strong> is the same for ' +

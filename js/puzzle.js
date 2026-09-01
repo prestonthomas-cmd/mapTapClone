@@ -5,8 +5,8 @@
   var ROUNDS = 5;
   var MULTIPLIERS = [1, 1, 2, 3, 3];        // sums to 10 -> 1000 points a game
   var MAX_SCORE = 1000;
-  var HALF_MARKS_KM = 2000;                 // the distance worth exactly 50
-  var FALLOFF = 1.5;                        // >1 keeps near misses cheap
+  var HALF_MARKS_KM = 3000;                 // the distance worth exactly 50
+  var FALLOFF = 2;                          // squared: a plateau, then a fall
   var BULLSEYE_KM = 50;                     // found the city, take the 100
 
   /* Day 1 is the day the clone went live. Games are numbered from there. */
@@ -115,25 +115,22 @@
    * ------------------------------------------------------------------ */
   /* 0-100 per round, before the round multiplier.
    *
-   *     score = 100 / (1 + (km / 2000) ^ 1.5)
+   *     score = 100 / (1 + (km / 3000) ^ 2)
    *
-   * A plain exponential decay reads wrong to players: it punishes a near miss
-   * about as steeply as a wild one, so landing in the right city still costs
-   * you marks while landing on the wrong continent is oddly well paid. This
-   * curve is deliberately flat near zero and steepest through the middle,
-   * which matches how people actually judge a guess:
+   * Squaring gives a plateau rather than a slope: being a little wrong should
+   * cost almost nothing, because on a globe "a little wrong" still means you
+   * knew where the place was. Landing in the right country is a couple of
+   * points, not a fifth of the round. The fall comes later, once the guess is
+   * genuinely in the wrong part of the world.
    *
-   *   right city   (<50 km)     100      you found it
-   *   right region (~250 km)     96
-   *   right country(~500 km)     89
-   *   right neighbourhood of the
-   *     world (~1000 km)         74
-   *   half marks   (2000 km)     50
-   *   right continent (~3000)    35
-   *   wrong continent (8000+)    11      and fading to nothing
-   *
-   * It also puts a strong game in the 900s, which is where MapTap's own
-   * players describe a good score sitting.
+   *   right city    (<50 km)     100
+   *   250 km                      99      still the right area
+   *   500 km                      97      right country
+   *   1000 km                     90
+   *   2000 km                     69
+   *   3000 km                     50      half marks
+   *   5000 km                     26
+   *   8000 km+                    12      wrong part of the planet
    */
   function baseScore(distanceKm) {
     if (distanceKm <= BULLSEYE_KM) return 100;
@@ -162,12 +159,11 @@
   }
 
   function grade(total) {
-    var pct = total / MAX_SCORE;
-    if (pct >= 0.92) return 'Cartographer';
-    if (pct >= 0.80) return 'Navigator';
-    if (pct >= 0.65) return 'Globetrotter';
-    if (pct >= 0.48) return 'Tourist';
-    if (pct >= 0.30) return 'Lost luggage';
+    if (total >= 950) return 'Cartographer';
+    if (total >= 880) return 'Navigator';
+    if (total >= 760) return 'Globetrotter';
+    if (total >= 600) return 'Tourist';
+    if (total >= 400) return 'Lost luggage';
     return 'Off the map';
   }
 
