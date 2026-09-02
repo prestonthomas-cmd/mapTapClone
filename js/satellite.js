@@ -224,8 +224,12 @@
         var aniso = gl.getExtension('EXT_texture_filter_anisotropic') ||
                     gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
         if (aniso) {
+          // The globe is mostly seen at a slant - every part of the disc away
+          // from its centre is foreshortened, and near the limb severely so.
+          // That is exactly what anisotropic filtering is for, so take all of
+          // it the driver offers rather than an arbitrary 8.
           gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT,
-                           Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+                           gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT));
         }
         self.resolution = width;
         self.ready = true;

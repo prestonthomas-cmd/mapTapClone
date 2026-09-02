@@ -162,11 +162,18 @@ at an ordinary column 200 px away. The script never upscales, generates each tie
 and writes `assets/plates.js` so the page only requests plates that exist. Nothing else
 changes — commit the regenerated `assets/` and push.
 
-Tiers stop at 8192 by default: roughly 2–4 MB, and within the `MAX_TEXTURE_SIZE` of
+Tiers stop at 8192 by default: roughly 4 MB, and within the `MAX_TEXTURE_SIZE` of
 essentially every GPU that reports more than 4096. Pass `--max=16384` to opt into the
-largest tier, which is a 12 MB+ download. Plates above 4096 wide are fetched only once you
-zoom past 2.5x, and are skipped entirely on GPUs that cannot hold them — plenty of phones
-still cap at 4096. `tools/source/` is gitignored; the generated plates are what ship.
+largest tier. Plates above 4096 wide are fetched only once you zoom past 2.5x, and are
+skipped entirely on GPUs that cannot hold them — plenty of phones still cap at 4096.
+`tools/source/` is gitignored; the generated plates are what ship.
+
+Every tier that is ever magnified is encoded 4:4:4. Chroma subsampling halves the resolution
+of colour, and on this plate the colour *is* the coastline: a green-to-blue edge carries
+almost no luminance step, so it survives 4:2:0 badly. The large tiers are also encoded at
+high quality — at q78 the 8K tier came out at 2 MB from a 4.35 MB source, discarding a third
+of what the source had. They sit behind a zoom, so those bytes are only spent by players who
+have zoomed far enough to see them.
 
 **The globe** is a real orthographic projection rather than an image or a map library.
 Dragging changes the geographic point at the centre of the disc; a tap is unprojected back

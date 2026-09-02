@@ -99,11 +99,20 @@ function open(file) {
 
 /* Only widths the source can actually support are emitted - upscaling would
  * add bytes and no detail. */
+/* 4:4:4 on every tier that is ever magnified. Chroma subsampling halves the
+ * resolution of colour, and on this plate the colour *is* the coastline - a
+ * green-to-blue edge with no luminance step survives 4:2:0 badly. The small
+ * placeholder can afford it because it is only ever on screen for a moment.
+ *
+ * The large tiers are also encoded well above the old quality: at q78 the 8K
+ * tier was 2 MB from a 4.35 MB source, throwing away a third of what the
+ * source actually had. They are deferred behind a zoom, so the bytes are only
+ * spent by players who have zoomed in far enough to see the difference. */
 const TIERS = [
   { width: 1024, quality: 80, chroma: '4:2:0', sharpen: 0,   defer: false },
-  { width: 4096, quality: 82, chroma: '4:4:4', sharpen: 0.7, defer: false },
-  { width: 8192, quality: 78, chroma: '4:2:0', sharpen: 0.7, defer: true },
-  { width: 16384, quality: 76, chroma: '4:2:0', sharpen: 0.6, defer: true },
+  { width: 4096, quality: 88, chroma: '4:4:4', sharpen: 0.7, defer: false },
+  { width: 8192, quality: 92, chroma: '4:4:4', sharpen: 0.7, defer: true },
+  { width: 16384, quality: 90, chroma: '4:4:4', sharpen: 0.6, defer: true },
 ];
 
 /* Builds the whole plate at exactly the requested size.
