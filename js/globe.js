@@ -95,7 +95,10 @@
     this.requestRender();
   };
 
-  var DEFERRED_PLATE_ZOOM = 2.5;
+  /* The 4096 plate runs out at about 1.7x - beyond that one of its texels no
+   * longer fills a screen pixel and the globe starts to soften. Fetch the
+   * large plate from just before that point rather than well after it. */
+  var DEFERRED_PLATE_ZOOM = 1.8;
 
   Globe.prototype.setZoom = function (z) {
     this.zoom = geo.clamp(z, 1, MAX_ZOOM);
