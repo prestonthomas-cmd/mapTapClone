@@ -25,45 +25,54 @@ so it works straight off the filesystem with no server at all.
   A perfect game is **1000**.
 
 ```
-score = 100 / (1 + (km / 3575) ^ 3.13)
+score = 100 / (1 + (km / 3865) ^ 1.03)   + 8.6  if the guess landed
+                                                in the right country
 ```
 
-| you were | score | |
+| you were | score | in the right country |
 | --- | --- | --- |
-| within 500 km | **100** | |
-| 1 000 km | 98 | |
-| 2 000 km | 86 | |
-| 3 000 km | 64 | |
-| 3 575 km | 50 | half marks |
-| 5 000 km | 26 | |
-| 8 000 km+ | ~7 | wrong part of the planet |
+| within 500 km | 100 | **100** |
+| 1 000 km | 79 | **88** |
+| 2 000 km | 66 | **75** |
+| 3 865 km | 50 | **59** |
+| 8 000 km | 33 | **41** |
+| opposite side of the world | 16 | **24** |
 
-**This is fitted to MapTap, not chosen.** MapTap reports a distance and a percentage after
-every guess. Game #803 gave 13 km → 100%, 219 km → 95%, 6 km → 100%, 3440 km → 53% and
-2895 km → 66%, totalling 752 — which reconstructs *exactly* under multipliers ×1,×1,×2,×3,×3.
-That confirms two things at once: the percentage shown is the 0–100 round score, and the
-multipliers here were already right.
+**This is fitted to MapTap, not chosen — and there is a same-country bonus.**
 
-The shape is a long plateau and then a fall, and it is far more forgiving through the middle
-than anything guessed here previously. At 2000 km MapTap pays 86 where this game had been
-paying 50; that same game would have scored 570 on the old curve against the 752 MapTap
-actually awarded. The game was harder than MapTap, not easier.
+MapTap reports a distance and a percentage after every guess. Game #803 gave 13 km → 100%,
+219 km → 95%, 6 km → 100%, 3440 km → 53% and 2895 km → 66%, totalling 752, which reconstructs
+exactly under multipliers ×1,×1,×2,×3,×3.
 
-Two caveats are worth keeping in view. Every curve family tried reproduces the two far
-points almost exactly and none explains 219 km → 95 — they all predict 99 or 100 there — so
-either the near range has a rule of its own or that reading is noise. And nothing at all was
-observed between 219 km and 2895 km, so the middle is interpolation; the four families
-disagree by up to 7 points through it.
+No pure distance curve explains that set. Four families were tried and all four reproduce the
+far points while predicting 99 or 100 at 219 km, where MapTap gave 95 — a stubborn five-point
+miss. A same-country bonus explains it, and the geography agrees: Copenhagen is 229 km from
+Gothenburg and Kristiansand 239 km, so a 219 km miss lands abroad and forfeits the bonus,
+while 2895 km from Urumqi is still comfortably inside China (Beijing 2411 km, Shanghai
+3268 km) and keeps it.
 
-To refine with more observations:
+The data confirms this rather than merely tolerating it. Fitting all four assignments of the
+two uncertain flags, only those putting the Urumqi guess inside China fit at all — RMS 0.03
+against 2.23 for the alternatives. With the bonus, every observation is reproduced to a tenth
+of a point and #803 totals exactly 752.
+
+The exponent landing on 1.03 means the shape is essentially `100 · K/(K + km)`, which is the
+kind of formula someone actually writes.
+
+One caveat is carried in the code rather than smoothed over: nothing was observed past
+3440 km, so the tail is extrapolation, and an exponent near 1 implies a fat one — a guess on
+the wrong side of the planet still scores in the teens. A single observation from a badly
+missed round would settle it.
+
+To refine:
 
 ```bash
-node tools/fit-score-curve.js 13:100 219:95 6:100 3440:53 2895:66
+node tools/fit-score-curve.js 13:100:same 219:95 6:100:same 3440:53 2895:66:same
 ```
 
-Each argument is `<km>:<percent>`, read straight off MapTap. It fits four families, ranks
-them by residual, names the observation carrying the largest error, and points at the widest
-unsampled span — because a reading in the gap is worth more than another at the ends.
+Each argument is `<km>:<percent>`, with `:same` when the guess landed in the answer's own
+country. The fitter searches curve *and* bonus across four families, ranks them by residual,
+and points at the widest unsampled span.
 
 **The city pool** is deliberately small — about 480 places — because every entry has to be
 one a player could reasonably attempt. An ordinary city of 200 000 is not a hard question,

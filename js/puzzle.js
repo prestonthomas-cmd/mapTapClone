@@ -5,9 +5,12 @@
   var ROUNDS = 5;
   var MULTIPLIERS = [1, 1, 2, 3, 3];        // sums to 10 -> 1000 points a game
   var MAX_SCORE = 1000;
-  var HALF_MARKS_KM = 3575;                 // the distance worth exactly 50
-  var FALLOFF = 3.13;                       // a long plateau, then a fall
-  var BULLSEYE_KM = 50;                     // found the city, take the 100
+  var HALF_MARKS_KM = 3865;                 // the distance worth exactly 50
+  var FALLOFF = 1.03;                       // very close to a plain 1/(1+d/K)
+  var SAME_COUNTRY_BONUS = 8.6;             // for landing in the right country
+  // Display only: the fitted curve plus the same-country bonus already gives a
+  // clean 100 for a close guess, so this just decides the wording.
+  var BULLSEYE_KM = 50;
 
   /* Day 1 is the day the clone went live. Games are numbered from there. */
   var EPOCH = { y: 2026, m: 7, d: 27 };     // 27 Aug 2026, month is 0-based
@@ -115,58 +118,72 @@
    * ------------------------------------------------------------------ */
   /* 0-100 per round, before the round multiplier.
    *
-   *     score = 100 / (1 + (km / 3575) ^ 3.13)
+   *     score = 100 / (1 + (km / 3865) ^ 1.03)      + 8.6 if the guess landed
+   *                                                   in the right country
    *
-   * Fitted to MapTap itself rather than chosen. MapTap #803 reported, round by
-   * round, 13 km -> 100%, 219 km -> 95%, 6 km -> 100%, 3440 km -> 53% and
-   * 2895 km -> 66%, for a total of 752 - which reconstructs exactly under
-   * multipliers 1,1,2,3,3, confirming both that the percentage shown is the
-   * base score and that our multipliers were already right.
+   * Fitted to MapTap, not chosen. Game #803 reported 13 km -> 100%,
+   * 219 km -> 95%, 6 km -> 100%, 3440 km -> 53%, 2895 km -> 66%, totalling 752.
    *
-   * The shape is a long plateau and then a fall. It is far more forgiving
-   * through the middle than anything guessed here previously: at 2000 km
-   * MapTap pays 86 where we had been paying 50, and that same game would have
-   * scored 570 on the old curve against the 752 MapTap actually awarded.
+   * No pure distance curve explains that set. Four families were tried and all
+   * four reproduce the far points while predicting 99 or 100 at 219 km, where
+   * MapTap gave 95 - a stubborn five-point miss. A same-country bonus explains
+   * it, and the geography agrees: Copenhagen is 229 km from Gothenburg and
+   * Kristiansand 239 km, so a 219 km miss lands abroad and forfeits the bonus,
+   * while 2895 km from Urumqi is still comfortably inside China (Beijing is
+   * 2411 km, Shanghai 3268 km) and keeps it.
    *
-   *   right city    (<50 km)     100
-   *   500 km                     100
-   *   1000 km                     98
-   *   2000 km                     86
-   *   3000 km                     64
-   *   3575 km                     50      half marks
-   *   5000 km                     26
-   *   8000 km+                     7      wrong part of the planet
+   * The data confirms this rather than merely tolerating it. Fitting all four
+   * assignments of the two uncertain flags, only those putting the Urumqi
+   * guess inside China fit at all: RMS 0.03 against 2.23 for the alternatives.
+   * With the bonus every observation is reproduced to a tenth of a point.
    *
-   * Caveats worth keeping. Every family tried reproduces the two far points
-   * almost exactly and none explains 219 km -> 95: they all predict 99 or 100
-   * there, so either the near range has a rule of its own or that reading is
-   * noise. And nothing at all was observed between 219 km and 2895 km, so the
-   * middle of the curve is interpolation. tools/fit-score-curve.js refits from
-   * further observations.
+   *   right country, any distance  +8.6
+   *   within 500 km                 100
+   *   1000 km                        79
+   *   2000 km                        66
+   *   3865 km                        50      half marks
+   *   8000 km                        33
+   *
+   * The exponent sitting on 1.03 means the underlying shape is essentially
+   * 100 * K / (K + km), which is the kind of thing someone actually writes.
+   *
+   * Caveat: nothing was observed past 3440 km, so the tail is extrapolation,
+   * and an exponent near 1 implies a fat one - a guess on the wrong side of
+   * the planet still scores in the teens. One observation from a badly missed
+   * round would settle it. tools/fit-score-curve.js refits from more data.
    */
-  function baseScore(distanceKm) {
-    if (distanceKm <= BULLSEYE_KM) return 100;
+  function baseScore(distanceKm, sameCountry) {
     var v = 100 / (1 + Math.pow(distanceKm / HALF_MARKS_KM, FALLOFF));
+    if (sameCountry) v += SAME_COUNTRY_BONUS;
+    if (v > 100) v = 100;
     return v < 1 ? 0 : Math.round(v);
   }
 
-  function scoreRound(round, guessLat, guessLon) {
+  /* `guessCC` is the ISO code the tap landed in, or null over open water. */
+  function scoreRound(round, guessLat, guessLon, guessCC) {
     var d = MT.geo.distanceKm(round.lat, round.lon, guessLat, guessLon);
-    var base = baseScore(d);
+    var same = !!guessCC && guessCC === round.cc;
+    var base = baseScore(d, same);
     return {
       distanceKm: d,
       base: base,
+      sameCountry: same,
       multiplier: round.multiplier,
       points: base * round.multiplier
     };
   }
 
   /* Emoji band used in the shared result. */
+  /* Bands for the shared result. The curve bottoms out near 16 rather than 0 -
+   * an exponent this close to 1 leaves a fat tail - so the thresholds are set
+   * against the range that actually occurs, or the darkest square would never
+   * be reached. Roughly: green is within 500 km, black is the wrong side of
+   * the world. */
   function band(base) {
     if (base >= 90) return 0;
-    if (base >= 70) return 1;
-    if (base >= 40) return 2;
-    if (base >= 15) return 3;
+    if (base >= 75) return 1;
+    if (base >= 55) return 2;
+    if (base >= 35) return 3;
     return 4;
   }
 
@@ -174,10 +191,10 @@
     // Anchored to MapTap's own numbers: its players call anything over 900 a
     // good game, and the observed #803 - two easy rounds nailed, both hard
     // rounds badly missed - scored 752.
-    if (total >= 950) return 'Cartographer';
-    if (total >= 880) return 'Navigator';
-    if (total >= 780) return 'Globetrotter';
-    if (total >= 650) return 'Tourist';
+    if (total >= 940) return 'Cartographer';
+    if (total >= 860) return 'Navigator';
+    if (total >= 760) return 'Globetrotter';
+    if (total >= 620) return 'Tourist';
     if (total >= 450) return 'Lost luggage';
     return 'Off the map';
   }
@@ -192,6 +209,7 @@
     ROUNDS: ROUNDS,
     BULLSEYE_KM: BULLSEYE_KM,
     HALF_MARKS_KM: HALF_MARKS_KM,
+    SAME_COUNTRY_BONUS: SAME_COUNTRY_BONUS,
     MULTIPLIERS: MULTIPLIERS,
     MAX_SCORE: MAX_SCORE,
     EPOCH: EPOCH,
