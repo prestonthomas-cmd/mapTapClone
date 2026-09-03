@@ -5,7 +5,7 @@
   var ROUNDS = 5;
   var MULTIPLIERS = [1, 1, 2, 3, 3];        // sums to 10 -> 1000 points a game
   var MAX_SCORE = 1000;
-  var HALF_MARKS_KM = 3000;                 // the distance worth exactly 50
+  var HALF_MARKS_KM = 2000;                 // the distance worth exactly 50
   var FALLOFF = 2;                          // squared: a plateau, then a fall
   var BULLSEYE_KM = 50;                     // found the city, take the 100
 
@@ -115,7 +115,7 @@
    * ------------------------------------------------------------------ */
   /* 0-100 per round, before the round multiplier.
    *
-   *     score = 100 / (1 + (km / 3000) ^ 2)
+   *     score = 100 / (1 + (km / 2000) ^ 2)
    *
    * Squaring gives a plateau rather than a slope: being a little wrong should
    * cost almost nothing, because on a globe "a little wrong" still means you
@@ -124,13 +124,19 @@
    * genuinely in the wrong part of the world.
    *
    *   right city    (<50 km)     100
-   *   250 km                      99      still the right area
-   *   500 km                      97      right country
-   *   1000 km                     90
-   *   2000 km                     69
-   *   3000 km                     50      half marks
-   *   5000 km                     26
-   *   8000 km+                    12      wrong part of the planet
+   *   250 km                      98      still the right area
+   *   500 km                      94      right country
+   *   1000 km                     80
+   *   2000 km                     50      half marks
+   *   3000 km                     31
+   *   5000 km                     14
+   *   8000 km+                     6      wrong part of the planet
+   *
+   * The half-marks distance is the one number worth arguing about, and it is
+   * calibrated rather than chosen: MapTap's own players describe anything over
+   * 900 as a good game, so a strong game here should approach 900 without
+   * sailing past it. At 2000 km it lands on 893. tools/fit-score-curve.js
+   * refits both constants from real observed (distance, points) pairs.
    */
   function baseScore(distanceKm) {
     if (distanceKm <= BULLSEYE_KM) return 100;
@@ -159,11 +165,11 @@
   }
 
   function grade(total) {
-    if (total >= 950) return 'Cartographer';
-    if (total >= 880) return 'Navigator';
-    if (total >= 760) return 'Globetrotter';
-    if (total >= 600) return 'Tourist';
-    if (total >= 400) return 'Lost luggage';
+    if (total >= 920) return 'Cartographer';
+    if (total >= 830) return 'Navigator';
+    if (total >= 690) return 'Globetrotter';
+    if (total >= 520) return 'Tourist';
+    if (total >= 330) return 'Lost luggage';
     return 'Off the map';
   }
 

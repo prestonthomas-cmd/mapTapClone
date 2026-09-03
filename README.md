@@ -25,23 +25,42 @@ so it works straight off the filesystem with no server at all.
   A perfect game is **1000**.
 
 ```
-score = 100 / (1 + (km / 3000) ^ 2)
+score = 100 / (1 + (km / 2000) ^ 2)
 ```
 
 | you were | score | |
 | --- | --- | --- |
 | within 50 km | **100** | right city |
-| 250 km | 99 | still the right area |
-| 500 km | 97 | right country |
-| 1 000 km | 90 | |
-| 2 000 km | 69 | |
-| 3 000 km | 50 | half marks |
-| 8 000 km+ | ~12 | wrong part of the planet |
+| 250 km | 98 | still the right area |
+| 500 km | 94 | right country |
+| 1 000 km | 80 | |
+| 2 000 km | 50 | half marks |
+| 3 000 km | 31 | |
+| 8 000 km+ | ~6 | wrong part of the planet |
 
 Squaring gives a plateau rather than a slope. On a globe, being a little wrong still means
-you knew where the place was, so landing in the right country should cost a couple of points
+you knew where the place was, so landing in the right country should cost a few points
 rather than a fifth of the round. The fall comes later, once a guess is genuinely in the
 wrong part of the world.
+
+The half-marks distance is the one number worth arguing about, and it is calibrated rather
+than chosen. MapTap's own players describe anything over 900 as a good game, so a strong
+game here should approach 900 without sailing past it — at 2 000 km it lands on 893.
+
+**Matching MapTap exactly.** The real formula is not published and the site is not reachable
+from a sandboxed build, so the curve is inferred. It does not have to stay that way: MapTap
+shows the distance and the points after every guess, and two constants means a handful of
+those pins the curve down. Collect some and run
+
+```bash
+node tools/fit-score-curve.js 120:100 480:95 900:83 1350:69 3100:29 7400:7
+```
+
+Each argument is `<km>:<points>`; rounds 1 and 2 are unmultiplied so they can be read
+straight off, and a multiplied round is written `2600:66x3`. The fitter searches both
+constants, reports the residual per observation, and warns when the data does not fit the
+shape at all — which would itself be worth knowing. It recovers a known curve to an RMS of
+0.3 points from six observations.
 
 ## Game numbers
 

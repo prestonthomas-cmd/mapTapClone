@@ -126,10 +126,10 @@
         'of the world costs everything.</p>' +
       '<ul>' +
         '<li>Within 50 km — a clean <strong>100</strong></li>' +
-        '<li>250 km — <strong>99</strong></li>' +
-        '<li>Right country, 500 km — <strong>97</strong></li>' +
-        '<li>1000 km — <strong>90</strong></li>' +
-        '<li>3000 km — half marks, <strong>50</strong></li>' +
+        '<li>250 km — <strong>98</strong></li>' +
+        '<li>Right country, 500 km — <strong>94</strong></li>' +
+        '<li>1000 km — <strong>80</strong></li>' +
+        '<li>2000 km — half marks, <strong>50</strong></li>' +
         '<li>Wrong part of the planet — single figures</li>' +
       '</ul>' +
       '<h3>Daily and practice</h3>' +
