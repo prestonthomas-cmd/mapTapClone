@@ -125,13 +125,15 @@
       '<p>Being a little wrong costs almost nothing. Being in the wrong part ' +
         'of the world costs everything.</p>' +
       '<ul>' +
-        '<li>Within 50 km — a clean <strong>100</strong></li>' +
-        '<li>250 km — <strong>98</strong></li>' +
-        '<li>Right country, 500 km — <strong>94</strong></li>' +
-        '<li>1000 km — <strong>80</strong></li>' +
-        '<li>2000 km — half marks, <strong>50</strong></li>' +
+        '<li>Anywhere within 500 km — a clean <strong>100</strong></li>' +
+        '<li>1000 km — <strong>98</strong></li>' +
+        '<li>2000 km — <strong>86</strong></li>' +
+        '<li>3000 km — <strong>64</strong></li>' +
+        '<li>3575 km — half marks, <strong>50</strong></li>' +
         '<li>Wrong part of the planet — single figures</li>' +
       '</ul>' +
+      '<p>Fitted to MapTap\u2019s own reported scores, so a round here is worth ' +
+        'what the same guess is worth there.</p>' +
       '<h3>Daily and practice</h3>' +
       '<p>Every game has a number. <strong>Daily #' + puzzle.todayNumber() + '</strong> is the same for ' +
         'everyone today, so scores are comparable. <strong>Practice</strong> games are numbered separately ' +

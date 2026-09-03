@@ -5,8 +5,8 @@
   var ROUNDS = 5;
   var MULTIPLIERS = [1, 1, 2, 3, 3];        // sums to 10 -> 1000 points a game
   var MAX_SCORE = 1000;
-  var HALF_MARKS_KM = 2000;                 // the distance worth exactly 50
-  var FALLOFF = 2;                          // squared: a plateau, then a fall
+  var HALF_MARKS_KM = 3575;                 // the distance worth exactly 50
+  var FALLOFF = 3.13;                       // a long plateau, then a fall
   var BULLSEYE_KM = 50;                     // found the city, take the 100
 
   /* Day 1 is the day the clone went live. Games are numbered from there. */
@@ -115,28 +115,34 @@
    * ------------------------------------------------------------------ */
   /* 0-100 per round, before the round multiplier.
    *
-   *     score = 100 / (1 + (km / 2000) ^ 2)
+   *     score = 100 / (1 + (km / 3575) ^ 3.13)
    *
-   * Squaring gives a plateau rather than a slope: being a little wrong should
-   * cost almost nothing, because on a globe "a little wrong" still means you
-   * knew where the place was. Landing in the right country is a couple of
-   * points, not a fifth of the round. The fall comes later, once the guess is
-   * genuinely in the wrong part of the world.
+   * Fitted to MapTap itself rather than chosen. MapTap #803 reported, round by
+   * round, 13 km -> 100%, 219 km -> 95%, 6 km -> 100%, 3440 km -> 53% and
+   * 2895 km -> 66%, for a total of 752 - which reconstructs exactly under
+   * multipliers 1,1,2,3,3, confirming both that the percentage shown is the
+   * base score and that our multipliers were already right.
+   *
+   * The shape is a long plateau and then a fall. It is far more forgiving
+   * through the middle than anything guessed here previously: at 2000 km
+   * MapTap pays 86 where we had been paying 50, and that same game would have
+   * scored 570 on the old curve against the 752 MapTap actually awarded.
    *
    *   right city    (<50 km)     100
-   *   250 km                      98      still the right area
-   *   500 km                      94      right country
-   *   1000 km                     80
-   *   2000 km                     50      half marks
-   *   3000 km                     31
-   *   5000 km                     14
-   *   8000 km+                     6      wrong part of the planet
+   *   500 km                     100
+   *   1000 km                     98
+   *   2000 km                     86
+   *   3000 km                     64
+   *   3575 km                     50      half marks
+   *   5000 km                     26
+   *   8000 km+                     7      wrong part of the planet
    *
-   * The half-marks distance is the one number worth arguing about, and it is
-   * calibrated rather than chosen: MapTap's own players describe anything over
-   * 900 as a good game, so a strong game here should approach 900 without
-   * sailing past it. At 2000 km it lands on 893. tools/fit-score-curve.js
-   * refits both constants from real observed (distance, points) pairs.
+   * Caveats worth keeping. Every family tried reproduces the two far points
+   * almost exactly and none explains 219 km -> 95: they all predict 99 or 100
+   * there, so either the near range has a rule of its own or that reading is
+   * noise. And nothing at all was observed between 219 km and 2895 km, so the
+   * middle of the curve is interpolation. tools/fit-score-curve.js refits from
+   * further observations.
    */
   function baseScore(distanceKm) {
     if (distanceKm <= BULLSEYE_KM) return 100;
@@ -165,11 +171,14 @@
   }
 
   function grade(total) {
-    if (total >= 920) return 'Cartographer';
-    if (total >= 830) return 'Navigator';
-    if (total >= 690) return 'Globetrotter';
-    if (total >= 520) return 'Tourist';
-    if (total >= 330) return 'Lost luggage';
+    // Anchored to MapTap's own numbers: its players call anything over 900 a
+    // good game, and the observed #803 - two easy rounds nailed, both hard
+    // rounds badly missed - scored 752.
+    if (total >= 950) return 'Cartographer';
+    if (total >= 880) return 'Navigator';
+    if (total >= 780) return 'Globetrotter';
+    if (total >= 650) return 'Tourist';
+    if (total >= 450) return 'Lost luggage';
     return 'Off the map';
   }
 
