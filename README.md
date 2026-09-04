@@ -25,39 +25,57 @@ so it works straight off the filesystem with no server at all.
   A perfect game is **1000**.
 
 ```
-score = 100 / (1 + (km / 3865) ^ 1.03)   + 8.6  if the guess landed
-                                                in the right country
+score = 100 / (1 + (km / 3867) ^ 1.05)
 ```
 
-| you were | score | in the right country |
+| you were | score |
+| --- | --- |
+| within 100 km | 98 |
+| 500 km | 90 |
+| 1 000 km | 81 |
+| 2 000 km | 67 |
+| 3 867 km | 50 |
+| 8 000 km | 32 |
+| opposite side of the world | 15 |
+
+**This is fitted to MapTap, not chosen.**
+
+MapTap reports a distance and a percentage after every guess. Ten rounds have been read off
+two games, and both reconstruct under multipliers ×1,×1,×2,×3,×3 — which is how those
+multipliers were confirmed rather than assumed.
+
+| game | rounds | total |
 | --- | --- | --- |
-| within 500 km | 100 | **100** |
-| 1 000 km | 79 | **88** |
-| 2 000 km | 66 | **75** |
-| 3 865 km | 50 | **59** |
-| 8 000 km | 33 | **41** |
-| opposite side of the world | 16 | **24** |
+| #803 | 13 km → 100, 219 km → 95, 6 km → 100, 3440 km → 53, 2895 km → 66 | 752 |
+| #804 | 66 km → 99, 190 km → 96, 912 km → 82, 105 km → 98, 3 km → 100 | 953 |
 
-**This is fitted to MapTap, not chosen — and there is a same-country bonus.**
+Nine of those ten rounds are reproduced **exactly** by the curve above. The 912 km reading is
+the one that carries the most weight: it fell in a range between 219 km and 2895 km that had
+never been sampled, and the curve — fitted before it existed — predicted 81.6 against the 82
+observed. Refitting over the nine clean rounds moved the constants only from
+3865/1.03 to 3867/1.05, and centred residuals that had all been leaning one way.
 
-MapTap reports a distance and a percentage after every guess. Game #803 gave 13 km → 100%,
-219 km → 95%, 6 km → 100%, 3440 km → 53% and 2895 km → 66%, totalling 752, which reconstructs
-exactly under multipliers ×1,×1,×2,×3,×3.
-
-No pure distance curve explains that set. Four families were tried and all four reproduce the
-far points while predicting 99 or 100 at 219 km, where MapTap gave 95 — a stubborn five-point
-miss. A same-country bonus explains it, and the geography agrees: Copenhagen is 229 km from
-Gothenburg and Kristiansand 239 km, so a 219 km miss lands abroad and forfeits the bonus,
-while 2895 km from Urumqi is still comfortably inside China (Beijing 2411 km, Shanghai
-3268 km) and keeps it.
-
-The data confirms this rather than merely tolerating it. Fitting all four assignments of the
-two uncertain flags, only those putting the Urumqi guess inside China fit at all — RMS 0.03
-against 2.23 for the alternatives. With the bonus, every observation is reproduced to a tenth
-of a point and #803 totals exactly 752.
-
-The exponent landing on 1.03 means the shape is essentially `100 · K/(K + km)`, which is the
+The exponent landing near 1 means the shape is essentially `100 · K/(K + km)`, which is the
 kind of formula someone actually writes.
+
+### There is no same-country bonus
+
+This carried one for a while, worth +8.6. It was inferred from a single round of #803 — Urumqi,
+which scored 66 at 2895 km where the curve says 57 — and the bonus closed that gap precisely.
+
+Game #804 refutes it. Four of its rounds would have scored 100 with a bonus and did not:
+Dundee 99 at 66 km, Valparaíso 98 at 105 km, Liberec 96 at 190 km, and #803's Gothenburg 95 at
+219 km. Sampling the circle at each of those radii against the country polygons, 71% of the
+ground 66 km from Dundee is UK land even when a sea tap is counted as no country at all. For
+the bonus to survive, every one of those four guesses has to have left its own country — about
+a 4% coincidence — while the one round that needs the bonus had only a 21% chance of being
+inside China. Dropping it takes the rounds reproduced exactly from six to nine.
+
+That leaves Urumqi unexplained. Its *score* is not in doubt, since #803 only totals 752 if that
+round scored 66, so it is the 2895 km reading that would have to be wrong — the curve wants
+2029 km for 66. No curve of this family can pass through it and its neighbours anyway: 912 km →
+82 and 3440 km → 53 both sit on the curve, and reaching 66 between them needs a local slope
+3.6× the steepest this family can be anywhere.
 
 One caveat is carried in the code rather than smoothed over: nothing was observed past
 3440 km, so the tail is extrapolation, and an exponent near 1 implies a fat one — a guess on

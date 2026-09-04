@@ -5,11 +5,10 @@
   var ROUNDS = 5;
   var MULTIPLIERS = [1, 1, 2, 3, 3];        // sums to 10 -> 1000 points a game
   var MAX_SCORE = 1000;
-  var HALF_MARKS_KM = 3865;                 // the distance worth exactly 50
-  var FALLOFF = 1.03;                       // very close to a plain 1/(1+d/K)
-  var SAME_COUNTRY_BONUS = 8.6;             // for landing in the right country
-  // Display only: the fitted curve plus the same-country bonus already gives a
-  // clean 100 for a close guess, so this just decides the wording.
+  var HALF_MARKS_KM = 3867;                 // the distance worth exactly 50
+  var FALLOFF = 1.05;                       // very close to a plain 1/(1+d/K)
+  // Display only: the curve already gives a close guess a clean 100, so this
+  // just decides the wording.
   var BULLSEYE_KM = 50;
 
   /* Day 1 is the day the clone went live. Games are numbered from there. */
@@ -118,43 +117,55 @@
    * ------------------------------------------------------------------ */
   /* 0-100 per round, before the round multiplier.
    *
-   *     score = 100 / (1 + (km / 3865) ^ 1.03)      + 8.6 if the guess landed
-   *                                                   in the right country
+   *     score = 100 / (1 + (km / 3867) ^ 1.05)
    *
-   * Fitted to MapTap, not chosen. Game #803 reported 13 km -> 100%,
-   * 219 km -> 95%, 6 km -> 100%, 3440 km -> 53%, 2895 km -> 66%, totalling 752.
+   * Fitted to MapTap, not chosen. Refit over nine clean observations, which
+   * moved it barely at all from the five it was first fitted to - and centred
+   * the residuals, which had all been leaning one way.
    *
-   * No pure distance curve explains that set. Four families were tried and all
-   * four reproduce the far points while predicting 99 or 100 at 219 km, where
-   * MapTap gave 95 - a stubborn five-point miss. A same-country bonus explains
-   * it, and the geography agrees: Copenhagen is 229 km from Gothenburg and
-   * Kristiansand 239 km, so a 219 km miss lands abroad and forfeits the bonus,
-   * while 2895 km from Urumqi is still comfortably inside China (Beijing is
-   * 2411 km, Shanghai 3268 km) and keeps it.
+   *     observed                            this curve pays
+   *       3 km   100      219 km    95        100 km   98
+   *      13 km   100      912 km    82        500 km   90
+   *      66 km    99     3440 km    53       2000 km   67
+   *     105 km    98                         3867 km   50   half marks
+   *     190 km    96                         8000 km   32
    *
-   * The data confirms this rather than merely tolerating it. Fitting all four
-   * assignments of the two uncertain flags, only those putting the Urumqi
-   * guess inside China fit at all: RMS 0.03 against 2.23 for the alternatives.
-   * With the bonus every observation is reproduced to a tenth of a point.
-   *
-   *   right country, any distance  +8.6
-   *   within 500 km                 100
-   *   1000 km                        79
-   *   2000 km                        66
-   *   3865 km                        50      half marks
-   *   8000 km                        33
-   *
-   * The exponent sitting on 1.03 means the underlying shape is essentially
+   * The exponent sitting near 1 means the underlying shape is essentially
    * 100 * K / (K + km), which is the kind of thing someone actually writes.
+   * The 912 km reading matters most: it landed in what had been a completely
+   * unsampled gap between 219 km and 2895 km, and the curve - fitted without
+   * it - predicted 81.6 against the 82 observed.
+   *
+   * Ten observed rounds across MapTap #803 and #804; nine reproduce exactly.
+   *
+   * There is no same-country bonus, though this carried one for a while. It
+   * was inferred from #803's Urumqi round, which scored 66 at 2895 km where
+   * the curve says 57, and a bonus of 8.6 closed that gap precisely. #804
+   * refutes it. Dundee scored 99 at 66 km, and 71% of the circle at that
+   * radius is UK land even counting a sea tap as no country - so a bonus would
+   * almost certainly have made it 100. The same holds for Valparaiso (98 at
+   * 105 km), Gothenburg (95 at 219 km) and Liberec (96 at 190 km): all four
+   * would have been 100. For the bonus to survive, every one of those four
+   * guesses has to have left its own country, which is about a 4% coincidence,
+   * while the round that needs the bonus had only a 21% chance of being inside
+   * China. Dropping it takes the rounds reproduced exactly from six to nine
+   * and makes #804 total 953 on the nose.
+   *
+   * Urumqi is therefore an outlier with no explanation. Its score is not in
+   * doubt - #803's published total of 752 only works if that round scored 66 -
+   * so it is the 2895 km reading that would have to be wrong; the curve wants
+   * 2029 km for 66. Worth re-reading if that screenshot resurfaces. No curve
+   * of this family can pass through it and its neighbours: 912 km -> 82 and
+   * 3440 km -> 53 both sit on the curve, and reaching 66 at 2895 km between
+   * them needs a local slope 3.6x the steepest this family can be anywhere.
    *
    * Caveat: nothing was observed past 3440 km, so the tail is extrapolation,
    * and an exponent near 1 implies a fat one - a guess on the wrong side of
    * the planet still scores in the teens. One observation from a badly missed
    * round would settle it. tools/fit-score-curve.js refits from more data.
    */
-  function baseScore(distanceKm, sameCountry) {
+  function baseScore(distanceKm) {
     var v = 100 / (1 + Math.pow(distanceKm / HALF_MARKS_KM, FALLOFF));
-    if (sameCountry) v += SAME_COUNTRY_BONUS;
     if (v > 100) v = 100;
     return v < 1 ? 0 : Math.round(v);
   }
@@ -162,8 +173,8 @@
   /* `guessCC` is the ISO code the tap landed in, or null over open water. */
   function scoreRound(round, guessLat, guessLon, guessCC) {
     var d = MT.geo.distanceKm(round.lat, round.lon, guessLat, guessLon);
-    var same = !!guessCC && guessCC === round.cc;
-    var base = baseScore(d, same);
+    var same = !!guessCC && guessCC === round.cc;   // reported, but not scored
+    var base = baseScore(d);
     return {
       distanceKm: d,
       base: base,
@@ -209,7 +220,6 @@
     ROUNDS: ROUNDS,
     BULLSEYE_KM: BULLSEYE_KM,
     HALF_MARKS_KM: HALF_MARKS_KM,
-    SAME_COUNTRY_BONUS: SAME_COUNTRY_BONUS,
     MULTIPLIERS: MULTIPLIERS,
     MAX_SCORE: MAX_SCORE,
     EPOCH: EPOCH,

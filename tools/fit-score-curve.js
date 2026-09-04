@@ -9,13 +9,19 @@
  * can be read straight off the screen, no multiplier arithmetic needed.
  *
  * Usage:
- *   node tools/fit-score-curve.js 13:100:same 219:95 6:100:same 3440:53 2895:66:same
+ *   node tools/fit-score-curve.js 66:99 190:96 912:82 105:98 3:100 \
+ *                                 13:100 219:95 6:100 3440:53 2895:66
  *
  * Each argument is <kilometres>:<percent>, with ":same" appended when the guess
- * landed inside the answer's own country. That flag matters: MapTap awards a
- * same-country bonus, and without it no distance curve can fit - four families
- * were tried and every one of them missed 219 km -> 95 by five points. With it,
- * game #803 is reproduced to a tenth of a point.
+ * landed inside the answer's own country.
+ *
+ * The ":same" flag exists to test for a same-country bonus, which is fitted as
+ * a free parameter alongside the curve. One was believed in for a while and is
+ * not real: nine of the ten observed rounds fit a pure distance curve exactly,
+ * and the four that would have scored 100 under a bonus did not. Leave the flag
+ * off unless new observations argue for it - and if they do, this is what
+ * settles the question rather than the geography guesswork that misled it
+ * before. See the scoring note in js/puzzle.js.
  *
  * Four families are fitted and ranked, because if the real curve is not the
  * shape assumed here the residuals should say so rather than be absorbed.
@@ -93,4 +99,5 @@ if (top.rms > 3) {
   console.log('\nRMS above 3 points: either an observation is mistyped, or the real curve is');
   console.log('not this shape. Check which observation carries the large residual above.');
 }
-console.log('\nTo adopt: set HALF_MARKS_KM, FALLOFF and SAME_COUNTRY_BONUS in js/puzzle.js.');
+console.log('\nTo adopt: set HALF_MARKS_KM and FALLOFF in js/puzzle.js. A bonus fitted well');
+console.log('above zero would be a real finding - the shipped model has none.');

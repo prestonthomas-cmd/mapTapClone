@@ -125,13 +125,12 @@
       '<p>Being a little wrong costs almost nothing. Being in the wrong part ' +
         'of the world costs everything.</p>' +
       '<ul>' +
-        '<li>Land in the <strong>right country</strong> and you keep an extra ' +
-          '<strong>+9</strong>, at any distance</li>' +
-        '<li>Within 500 km — a clean <strong>100</strong></li>' +
-        '<li>1000 km — <strong>79</strong></li>' +
-        '<li>2000 km — <strong>66</strong></li>' +
-        '<li>3865 km — half marks, <strong>50</strong></li>' +
-        '<li>Wrong side of the world — the high teens</li>' +
+        '<li>Within 100 km — <strong>98</strong> or better</li>' +
+        '<li>500 km — <strong>90</strong></li>' +
+        '<li>1000 km — <strong>81</strong></li>' +
+        '<li>2000 km — <strong>67</strong></li>' +
+        '<li>3867 km — half marks, <strong>50</strong></li>' +
+        '<li>Wrong side of the world — the mid teens</li>' +
       '</ul>' +
       '<p>Fitted to MapTap\u2019s own reported scores, so a round here is worth ' +
         'what the same guess is worth there.</p>' +
@@ -285,8 +284,8 @@
 
     var round = state.game.rounds[state.roundIndex];
     var guess = state.pending;
-    // Resolved once: the score needs it for the same-country bonus and the
-    // result line needs it to say where the tap landed.
+    // Where the tap landed, for the result line. It does not affect the
+    // score - see the scoring note in puzzle.js.
     var where = MT.world.countryAt(guess[0], guess[1]);
     var scored = puzzle.scoreRound(round, guess[1], guess[0], where && where.cc);
     scored.guess = guess;
@@ -309,11 +308,8 @@
   }
 
   function describeMiss(guess, round, scored) {
-    var bonus = scored.sameCountry
-      ? ' <strong>+' + Math.round(puzzle.SAME_COUNTRY_BONUS) + '</strong> for the right country.'
-      : '';
     if (scored.distanceKm <= puzzle.BULLSEYE_KM) {
-      return 'Bullseye — <strong>' + esc(puzzle.formatDistance(scored.distanceKm)) + '</strong> away.' + bonus;
+      return 'Bullseye — <strong>' + esc(puzzle.formatDistance(scored.distanceKm)) + '</strong> away.';
     }
     var dir = geo.compassPoint(geo.bearing(round.lat, round.lon, guess[1], guess[0]));
     var where = scored.where;
@@ -322,7 +318,7 @@
       : 'in open water';
     return 'You tapped ' + place + ' — <strong>' +
            esc(puzzle.formatDistance(scored.distanceKm)) + '</strong> ' + dir + ' of ' +
-           esc(round.city) + '.' + bonus;
+           esc(round.city) + '.';
   }
 
   function nextRound() {
