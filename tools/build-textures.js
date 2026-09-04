@@ -115,6 +115,16 @@ const TIERS = [
   { width: 16384, quality: 90, chroma: '4:4:4', sharpen: 0.6, defer: true },
 ];
 
+/* The zoom at which a tier is worth fetching: the point where the tier below
+ * it stops being able to fill a screen pixel and the globe starts to soften.
+ * A 4096 plate runs out at about 1.7x, which is where the 8192 gate of 1.8 was
+ * tuned by eye; each doubling of width doubles the zoom it can carry, so the
+ * same rule puts 16384 at 3.6. Without this every deferred tier fetched at the
+ * same moment, and a player who zoomed a little pulled the 16K plate - twenty
+ * megabytes they could not yet resolve - along with the 8K.
+ */
+const gateFor = (width) => Math.round(1.8 * (width / 8192) * 10) / 10;
+
 /* Builds the whole plate at exactly the requested size.
  *
  * Each tile is resized straight to its cell rather than stitching at full
@@ -231,7 +241,8 @@ async function plateAt(src, width, height) {
     await pipe.jpeg({ quality: tier.quality, mozjpeg: true, chromaSubsampling: tier.chroma })
               .toFile(dest);
     const kb = fs.statSync(dest).size / 1024;
-    produced.push({ url: 'assets/' + name, width: tier.width, defer: tier.defer });
+    produced.push({ url: 'assets/' + name, width: tier.width, defer: tier.defer,
+                    minZoom: tier.defer ? gateFor(tier.width) : 0 });
     console.log(`  ${name.padEnd(14)} ${tier.width}x${tier.width / 2}  ${kb.toFixed(0)} KB` +
                 (tier.defer ? '  (loaded on zoom)' : ''));
   }

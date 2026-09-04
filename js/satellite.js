@@ -191,21 +191,30 @@
   };
 
   /* Large plates are worth several megabytes, so they wait until the player
-   * actually zooms in far enough to see the difference. */
-  SatelliteLayer.prototype.loadDeferred = function () {
+   * actually zooms in far enough to see the difference. Each carries its own
+   * gate: the 8K plate is worth fetching well before the 16K one, and a player
+   * who never zooms past the 8K plate's range should never pay for the 16K. */
+  SatelliteLayer.prototype.loadDeferred = function (zoom) {
     if (!this._deferred || !this._deferred.length) return;
-    var pending = this._deferred;
-    this._deferred = null;
-    this._runChain(pending);
+    var z = zoom || 0;
+    var ready = [], waiting = [];
+    this._deferred.forEach(function (s) {
+      ((s.minZoom || 0) <= z ? ready : waiting).push(s);
+    });
+    if (!ready.length) return;
+    this._deferred = waiting;
+    this._runChain(ready);
   };
 
+  /* Appends to the running chain rather than starting a new one, so plates
+   * released by separate zoom gates still decode one at a time and in order. */
   SatelliteLayer.prototype._runChain = function (list) {
     var self = this;
-    var chain = Promise.resolve();
+    var chain = this._chain || Promise.resolve();
     list.forEach(function (src) {
       chain = chain.then(function () { return self._loadOne(src.url, src.width); });
     });
-    chain.catch(function () { /* a missing plate just leaves the last good one */ });
+    this._chain = chain.catch(function () { /* a missing plate leaves the last good one */ });
   };
 
   SatelliteLayer.prototype._loadOne = function (url, width) {

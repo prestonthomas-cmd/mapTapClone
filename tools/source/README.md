@@ -6,17 +6,18 @@ ship. This note records where the committed plates came from so they can be rebu
 
 ## Current source
 
-**Solar System Scope, 8K Earth day map** — 8192x4096 equirectangular, derived from NASA
-Blue Marble, cloudless.
+**NASA Blue Marble Next Generation, topography and bathymetry, June 2004** — the eight
+21600x21600 tiles A1..D2, assembled to 86400x43200 and downsampled to the shipped tiers.
 
-- Original: <https://www.solarsystemscope.com/textures/>
-- Licence: **CC BY 4.0** — attribution is required and is given in the README and in the
-  game's How-to-play panel.
-- Mirror used when the original was unreachable:
-  <https://raw.githubusercontent.com/Siqister/files/master/8k_earth_daymap.jpg>
-  (4 565 076 bytes, verified 8192x4096)
+- Collection: <https://visibleearth.nasa.gov/collection/1484/blue-marble>
+- Licence: **public domain.** NASA imagery is not copyrighted; credit is given in the
+  README and in the game's How-to-play panel anyway.
+- Held on this repository's `source-imagery` release; see below.
 
-Save it here under any name and run `npm run build:textures`.
+It replaced an 8192x4096 Solar System Scope day map (CC BY 4.0). The gain is not only
+resolution: that plate's oceans were a flat colour, and these carry real seafloor relief.
+
+Drop a source here under any name and run `npm run build:textures`.
 
 ## Going further
 

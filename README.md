@@ -143,9 +143,10 @@ and its licence. Running the build without it falls back to the 4096x2048 plate 
 `three-globe`, which would silently discard the 8K tier, so the build refuses and writes
 nothing unless given `--force`.
 
-Imagery is the 8K Earth day map from
-[Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0, derived from
-NASA Blue Marble). That attribution is also shown in the game's How to play panel.
+Imagery is NASA's [Blue Marble Next Generation](https://visibleearth.nasa.gov/collection/1484/blue-marble)
+with topography and bathymetry — June 2004, stitched from the eight 21600x21600 tiles, so
+the oceans carry real seafloor relief rather than a flat colour. NASA imagery is in the
+public domain; the credit is shown in the game's How to play panel.
 
 ## Not affiliated with MapTap
 

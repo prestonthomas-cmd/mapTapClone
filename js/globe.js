@@ -98,12 +98,15 @@
   /* The 4096 plate runs out at about 1.7x - beyond that one of its texels no
    * longer fills a screen pixel and the globe starts to soften. Fetch the
    * large plate from just before that point rather than well after it. */
+  /* The lowest gate any deferred plate can have - a cheap early-out so the
+   * common case does no work. Which plates actually load at a given zoom is
+   * decided per plate, from the minZoom the build recorded for each. */
   var DEFERRED_PLATE_ZOOM = 1.8;
 
   Globe.prototype.setZoom = function (z) {
     this.zoom = geo.clamp(z, 1, MAX_ZOOM);
     this.camera.radius = this.baseRadius * this.zoom;
-    if (this.satellite && this.zoom >= DEFERRED_PLATE_ZOOM) this.satellite.loadDeferred();
+    if (this.satellite && this.zoom >= DEFERRED_PLATE_ZOOM) this.satellite.loadDeferred(this.zoom);
     this.requestRender();
   };
 
