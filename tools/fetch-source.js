@@ -43,6 +43,19 @@ function currentRepo() {
 
 const mb = (n) => (n / 1048576).toFixed(1) + ' MB';
 
+/* A complete JPEG ends with the end-of-image marker. Cheap to check and it is
+ * the failure that actually happens with browser-uploaded release assets. */
+function truncated(file) {
+  if (!/\.(jpg|jpeg)$/i.test(file)) return false;
+  const size = fs.statSync(file).size;
+  if (size < 2) return true;
+  const fd = fs.openSync(file, 'r');
+  const tail = Buffer.alloc(2);
+  fs.readSync(fd, tail, 0, 2, size - 2);
+  fs.closeSync(fd);
+  return !(tail[0] === 0xFF && tail[1] === 0xD9);
+}
+
 async function main() {
   const repo = arg('repo', currentRepo());
   const tag = arg('tag', DEFAULT_TAG);
@@ -68,10 +81,12 @@ async function main() {
   const total = assets.reduce((n, a) => n + a.size, 0);
   console.log(`${repo} @ ${tag}: ${assets.length} image${assets.length > 1 ? 's' : ''}, ${mb(total)}\n`);
 
+  const bad = [];
   for (const a of assets) {
     const dest = path.join(SOURCE_DIR, a.name);
     if (fs.existsSync(dest) && fs.statSync(dest).size === a.size) {
       console.log(`  have  ${a.name}  ${mb(a.size)}`);
+      truncated(dest) && bad.push(a.name);
       continue;
     }
     console.log(`  get   ${a.name}  ${mb(a.size)}`);
@@ -82,6 +97,20 @@ async function main() {
                  { stdio: ['ignore', 'ignore', 'inherit'] });
     const got = fs.statSync(dest).size;
     if (got !== a.size) throw new Error(`${a.name} downloaded as ${got} bytes, expected ${a.size}.`);
+    truncated(dest) && bad.push(a.name);
+  }
+
+  /* A size match only proves the transfer was faithful, not that the asset is
+   * whole: a file cut short before it was uploaded arrives intact at its own
+   * truncated length. Catching that here names the culprit in seconds, rather
+   * than as a "premature end of JPEG image" partway through a long build. */
+  if (bad.length) {
+    throw new Error(`These assets are truncated on the release itself - the bytes here match ` +
+                    `what GitHub holds, so they were cut before or during upload:\n` +
+                    bad.map((n) => '  ' + n).join('\n') +
+                    `\n\nCheck the originals before re-uploading; a whole JPEG ends with ` +
+                    `ff d9:\n  for f in *.jpg; do [ "$(tail -c2 "$f" | od -An -tx1 | tr -d ' \\n')" ` +
+                    `= ffd9 ] && echo "ok  $f" || echo "BAD $f"; done`);
   }
 
   console.log(`\nInto ${path.relative(path.join(__dirname, '..'), SOURCE_DIR)}/. ` +

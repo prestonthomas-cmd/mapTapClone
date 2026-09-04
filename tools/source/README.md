@@ -76,5 +76,14 @@ grid parser.
 Upload one tile first and run `npm run fetch:source` against it before committing to the
 whole set - it proves the path end to end in a couple of minutes rather than after 2 GB.
 
+**Verify the files before uploading.** A browser upload that is cut short still produces a
+release asset, just a shorter one, and it downloads perfectly at its own truncated length -
+the size check cannot see it. `fetch-source.js` therefore also checks that each JPEG ends
+with its end-of-image marker and names any file that does not, but catching it locally
+first is quicker:
+
+    for f in *.jpg; do [ "$(tail -c2 "$f" | od -An -tx1 | tr -d ' \n')" = ffd9 ] \
+      && echo "ok  $f" || echo "BAD $f"; done
+
 Do **not** use Git LFS for the plates in `assets/`. GitHub Pages does not resolve LFS
 pointers, so the site would serve a pointer file where the image should be.

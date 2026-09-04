@@ -6,8 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "fetch:source": "cd tools && npm install && node fetch-source.js",
-    "build:data": "cd tools && npm install && npm run build",
-    "build:textures": "cd tools && npm install && npm run build:textures"
+    "build:data": "cd tools && npm install && npm run build --",
+    "build:textures": "cd tools && npm install && npm run build:textures --"
   },
   "license": "MIT"
 }
