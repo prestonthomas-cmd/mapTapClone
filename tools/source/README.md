@@ -49,9 +49,32 @@ On macOS, with the tiles in a folder:
 They are gitignored, so add them with `git add -f tools/source/`, or upload them anywhere
 in the repo and move them here.
 
-Alternatively, attach the full-resolution tiles to a **GitHub release** rather than
-committing them: release assets allow 2 GB per file, stay out of the repo history, and are
-not published to Pages. They can then be downloaded into this directory before the build.
+## Full resolution, via a GitHub release
+
+Release assets take 2 GB per file, stay out of the repository history and are never
+published to Pages, so the whole 21600x21600 tile set can live alongside the code without
+being resized and without weighing the repo down.
+
+1. Go to <https://github.com/prestonthomas-cmd/mapTapClone/releases/new>.
+2. Tag it `source-imagery` (any tag works; pass `--tag=` to use another) and give it a
+   title. The tag is created by publishing, so it need not exist yet.
+3. Drag all eight tiles into the attachment box and wait for each to finish uploading.
+   Do not publish until every one shows as uploaded.
+4. Publish.
+
+Then, here:
+
+    npm run fetch:source
+    npm run build:textures -- --max=16384
+
+`fetch-source.js` reads the repository from the git remote, pulls every image attached to
+that tag into this directory, skips anything already downloaded at the right size, and
+resumes a transfer that was cut off rather than restarting it. Non-image assets are
+ignored, so release notes or a checksum file attached alongside will not confuse the tile
+grid parser.
+
+Upload one tile first and run `npm run fetch:source` against it before committing to the
+whole set - it proves the path end to end in a couple of minutes rather than after 2 GB.
 
 Do **not** use Git LFS for the plates in `assets/`. GitHub Pages does not resolve LFS
 pointers, so the site would serve a pointer file where the image should be.

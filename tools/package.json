@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Offline data build for the MapTap clone. Run `npm install && npm run build`.",
   "scripts": {
+    "fetch:source": "node fetch-source.js",
     "build": "node build-data.js",
     "build:textures": "node build-textures.js"
   },

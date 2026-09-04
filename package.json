@@ -5,6 +5,7 @@
   "description": "A playable clone of the daily geography game MapTap: tap a 3D globe as close as you can to five world cities.",
   "scripts": {
     "start": "node server.js",
+    "fetch:source": "cd tools && npm install && node fetch-source.js",
     "build:data": "cd tools && npm install && npm run build",
     "build:textures": "cd tools && npm install && npm run build:textures"
   },
