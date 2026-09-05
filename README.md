@@ -166,6 +166,18 @@ with topography and bathymetry — June 2004, stitched from the eight 21600x2160
 the oceans carry real seafloor relief rather than a flat colour. NASA imagery is in the
 public domain; the credit is shown in the game's How to play panel.
 
+Zoomed in, the globe is not the plate. A single texture covering the whole planet puts a
+floor under how sharp it can be — 8192 wide is 4.9 km per pixel — and going wider does not
+work: a 16384 plate needs about 1.2 GB to upload and takes a phone's browser down. So
+detail past that comes from `assets/tiles/`, cut from the same source by
+`tools/build-tiles.js`: 2560 tiles over two levels, 58 MB, reaching 1.2 km per pixel.
+
+Only the tiles under the viewport are fetched and only 48 are held at once, so the detail
+costs about 64 MB however far you zoom — less than the one plate it improves on. Tiles are
+drawn over the plate with the same shading, so a missing one is invisible apart from being
+softer, and the game works with none of them at all.
+
+
 ## Not affiliated with MapTap
 
 This is an independent reimplementation written from the game's public description, for

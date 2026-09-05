@@ -7,7 +7,8 @@
     "start": "node server.js",
     "fetch:source": "cd tools && npm install && node fetch-source.js",
     "build:data": "cd tools && npm install && npm run build --",
-    "build:textures": "cd tools && npm install && npm run build:textures --"
+    "build:textures": "cd tools && npm install && npm run build:textures --",
+    "build:tiles": "cd tools && npm install && node build-tiles.js"
   },
   "license": "MIT"
 }

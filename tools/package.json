@@ -6,7 +6,8 @@
   "scripts": {
     "fetch:source": "node fetch-source.js",
     "build": "node build-data.js",
-    "build:textures": "node build-textures.js"
+    "build:textures": "node build-textures.js",
+    "build:tiles": "node build-tiles.js"
   },
   "dependencies": {
     "all-the-cities": "^3.1.0",

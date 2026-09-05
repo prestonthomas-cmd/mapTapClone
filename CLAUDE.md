@@ -16,7 +16,8 @@ order. Everything hangs off a single `MT` namespace so the game also runs from
 
 `data/world.js` and `data/cities.js` are generated — edit `tools/build-data.js`
 and re-run `npm run build:data` rather than touching them by hand. Same for the
-satellite plates in `assets/` and `tools/build-textures.js`.
+satellite plates in `assets/` and `tools/build-textures.js`, and for the detail tiles
+in `assets/tiles/` and `tools/build-tiles.js`.
 
 ## Before pushing
 

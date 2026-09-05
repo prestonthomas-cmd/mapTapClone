@@ -47,6 +47,7 @@
       if (!layer.failed) {
         this.satellite = layer;
         if (this.opts.textures) layer.loadTextures(this.opts.textures);
+        if (this.opts.tiles) layer.useTiles(this.opts.tiles);
       }
     }
 

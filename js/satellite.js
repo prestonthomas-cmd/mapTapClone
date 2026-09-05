@@ -34,6 +34,24 @@
     '}'
   ].join('\n');
 
+  /* Shared so a detail tile and the plate underneath it cannot shade
+   * differently - the seam between them has to be invisible, and the only way
+   * to guarantee that is for both to run the same arithmetic. */
+  var SHADE = [
+    '  vec3 n = normalize(vPos);',
+    '  float c = dot(n, uView);',
+    // Exact limb: everything on the far side of the sphere is dropped.
+    '  if (c <= 0.0) discard;',
+    // Limb darkening, plus a soft lift toward the upper left so the disc
+    // reads as a sphere rather than a sticker.
+    '  float shade = 0.62 + 0.38 * pow(c, 0.45);',
+    '  float lift = 0.10 * clamp(dot(n, normalize(-uEast + uNorth + uView * 0.6)), 0.0, 1.0);',
+    '  colour = colour * (shade + lift);',
+    // Thin haze where the surface turns away from the camera.
+    '  float haze = pow(1.0 - c, 3.0);',
+    '  colour = mix(colour, vec3(0.42, 0.60, 0.82), haze * 0.42);'
+  ].join('\n');
+
   var FRAG = [
     'precision highp float;',
     'uniform sampler2D uTex;',
@@ -43,19 +61,52 @@
     'varying vec2 vUv;',
     'varying vec3 vPos;',
     'void main() {',
-    '  vec3 n = normalize(vPos);',
-    '  float c = dot(n, uView);',
-    // Exact limb: everything on the far side of the sphere is dropped.
-    '  if (c <= 0.0) discard;',
     '  vec3 colour = texture2D(uTex, vUv).rgb;',
-    // Limb darkening, plus a soft lift toward the upper left so the disc
-    // reads as a sphere rather than a sticker.
-    '  float shade = 0.62 + 0.38 * pow(c, 0.45);',
-    '  float lift = 0.10 * clamp(dot(n, normalize(-uEast + uNorth + uView * 0.6)), 0.0, 1.0);',
-    '  colour = colour * (shade + lift);',
-    // Thin haze where the surface turns away from the camera.
-    '  float haze = pow(1.0 - c, 3.0);',
-    '  colour = mix(colour, vec3(0.42, 0.60, 0.82), haze * 0.42);',
+    SHADE,
+    '  gl_FragColor = vec4(colour, 1.0);',
+    '}'
+  ].join('\n');
+
+  /* Detail tiles reuse one small patch mesh whose uv runs 0..1, and are placed
+   * on the sphere by uRect - the tile's rectangle in global uv. So a tile costs
+   * a uniform and a texture bind, not a mesh. */
+  var TILE_VERT = [
+    'attribute vec2 aUv;',
+    'uniform vec4 uRect;',
+    'uniform vec3 uEast;',
+    'uniform vec3 uNorth;',
+    'uniform vec2 uCentre;',
+    'uniform vec2 uViewport;',
+    'uniform float uRadius;',
+    'varying vec2 vUv;',
+    'varying vec3 vPos;',
+    'void main() {',
+    '  vec2 g = uRect.xy + aUv * uRect.zw;',
+    '  float lon = (g.x - 0.5) * 6.28318530718;',
+    '  float lat = (0.5 - g.y) * 3.14159265359;',
+    '  float cosLat = cos(lat);',
+    '  vec3 p = vec3(cosLat * cos(lon), cosLat * sin(lon), sin(lat));',
+    '  float x = dot(p, uEast);',
+    '  float y = dot(p, uNorth);',
+    '  vec2 px = uCentre + vec2(x * uRadius, -y * uRadius);',
+    '  gl_Position = vec4(px.x / uViewport.x * 2.0 - 1.0,',
+    '                     1.0 - px.y / uViewport.y * 2.0, 0.0, 1.0);',
+    '  vUv = aUv;',
+    '  vPos = p;',
+    '}'
+  ].join('\n');
+
+  var TILE_FRAG = [
+    'precision highp float;',
+    'uniform sampler2D uTex;',
+    'uniform vec3 uView;',
+    'uniform vec3 uEast;',
+    'uniform vec3 uNorth;',
+    'varying vec2 vUv;',
+    'varying vec3 vPos;',
+    'void main() {',
+    '  vec3 colour = texture2D(uTex, vUv).rgb;',
+    SHADE,
     '  gl_FragColor = vec4(colour, 1.0);',
     '}'
   ].join('\n');
@@ -106,6 +157,35 @@
     }
     return { pos: pos, uv: uv, idx: idx, count: idx.length };
   }
+
+  /* A tile spans a few degrees, so a coarse grid is plenty: at the largest
+   * level a 512px tile is 5.6 degrees across and 8 quads put a vertex every
+   * 0.7 degrees, finer than the base sphere's 1. */
+  var PATCH_STEPS = 8;
+
+  function buildPatch() {
+    var n = PATCH_STEPS, side = n + 1;
+    var uv = new Float32Array(side * side * 2);
+    var i = 0, x, y;
+    for (y = 0; y <= n; y++) {
+      for (x = 0; x <= n; x++) { uv[i++] = x / n; uv[i++] = y / n; }
+    }
+    var idx = new Uint16Array(n * n * 6), k = 0;
+    for (y = 0; y < n; y++) {
+      for (x = 0; x < n; x++) {
+        var a = y * side + x, b = a + side;
+        idx[k++] = a; idx[k++] = b; idx[k++] = a + 1;
+        idx[k++] = a + 1; idx[k++] = b; idx[k++] = b + 1;
+      }
+    }
+    return { uv: uv, idx: idx, count: idx.length };
+  }
+
+  /* Tiles resident at once. Each is 512px - 1 MB of RGBA, 1.4 with mipmaps -
+   * so 48 is about 64 MB, well under what one large plate costs and bounded
+   * however far the player zooms. */
+  var MAX_TILES = 48;
+  var MAX_INFLIGHT = 6;
 
   function SatelliteLayer(canvas, options) {
     this.canvas = canvas;
@@ -174,7 +254,51 @@
     gl.disable(gl.CULL_FACE);
 
     this._basis = new Float64Array(9);
+
+    /* Detail tiles are optional: if the second program will not build, or no
+     * manifest was served, the globe is exactly what it was before. */
+    this.tiles = null;
+    this._setupTiles(gl);
   }
+
+  SatelliteLayer.prototype._setupTiles = function (gl) {
+    var vs = compile(gl, gl.VERTEX_SHADER, TILE_VERT);
+    var fs = compile(gl, gl.FRAGMENT_SHADER, TILE_FRAG);
+    if (!vs || !fs) return;
+    var prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+
+    var patch = buildPatch();
+    this.tileProg = prog;
+    this.tileCount = patch.count;
+
+    this.patchUvBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.patchUvBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, patch.uv, gl.STATIC_DRAW);
+    this.patchIdxBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.patchIdxBuf);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, patch.idx, gl.STATIC_DRAW);
+
+    this.tAUv = gl.getAttribLocation(prog, 'aUv');
+    this.tu = {};
+    ['uRect', 'uEast', 'uNorth', 'uView', 'uCentre', 'uViewport', 'uRadius', 'uTex']
+      .forEach(function (n) { this.tu[n] = gl.getUniformLocation(prog, n); }, this);
+
+    this._cache = {};       // key -> { tex, used, loading }
+    this._live = 0;
+    this._inflight = 0;
+    this._frame = 0;
+  };
+
+  /* The manifest lists the levels the build produced. Without it the layer
+   * simply never asks for a tile. */
+  SatelliteLayer.prototype.useTiles = function (manifest) {
+    if (!this.tileProg || !manifest || !manifest.levels || !manifest.levels.length) return;
+    this.tiles = manifest.levels.slice().sort(function (a, b) { return a.width - b.width; });
+  };
 
   /* Peak bytes to put a 2:1 plate of this width on the GPU: the decoded copy
    * and the mipmapped texture exist at the same time during the upload. */
@@ -327,6 +451,7 @@
     this.canvas.height = Math.round(height * dpr);
     this.width = width;
     this.height = height;
+    this.dpr = dpr;   // the detail level is chosen against device pixels
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   };
 
@@ -335,23 +460,168 @@
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
   };
 
+  /* Which pyramid level is worth drawing. A level of width W puts W/2 texels
+   * across the visible hemisphere; at zoom z the viewport spans 1/z of that
+   * over `discPx` device pixels, so the level is adequate while W >= 2 z discPx.
+   * Returns null when the plate already resolves everything on screen, which is
+   * the common case and costs nothing. */
+  SatelliteLayer.prototype._levelFor = function (camera) {
+    if (!this.tiles) return null;
+    var discPx = camera.radius * (this.dpr || 1) * 2;
+    var want = discPx * 2;                       // texels needed across the globe
+    // Measured against the largest plate this device will end up with, not the
+    // one currently uploaded: during startup `resolution` is still the 1K
+    // placeholder, and comparing against that asks for tiles the plate on its
+    // way is about to make pointless.
+    if ((this.plateWidth || this.resolution) >= want) return null;
+    for (var i = 0; i < this.tiles.length; i++) {
+      if (this.tiles[i].width >= want) return this.tiles[i];
+    }
+    return this.tiles[this.tiles.length - 1];
+  };
+
+  /* The tiles overlapping the visible cap, as [x, y] index pairs. Near a pole
+   * the longitude span degenerates, so every column is taken there rather than
+   * trying to invert a wrap that has no answer. */
+  SatelliteLayer.prototype._visibleTiles = function (camera, level) {
+    var half = Math.sqrt(this.width * this.width + this.height * this.height) / 2;
+    var ang = camera.visibleAngle(half) * 180 / Math.PI + 1.0;   // degrees, padded
+    var lat0 = camera.centreLat - ang, lat1 = camera.centreLat + ang;
+    var y0 = Math.floor((90 - Math.min(90, lat1)) / 180 * level.rows);
+    var y1 = Math.ceil((90 - Math.max(-90, lat0)) / 180 * level.rows);
+
+    var out = [], x, y, cols = level.cols;
+    var wide = Math.abs(camera.centreLat) + ang >= 89;
+    var xs;
+    if (wide) {
+      xs = null;                                  // all columns
+    } else {
+      var k = Math.cos(Math.max(Math.abs(lat0), Math.abs(lat1)) * Math.PI / 180);
+      var dLon = k > 1e-6 ? Math.min(180, ang / k) : 180;
+      xs = [Math.floor((camera.centreLon - dLon + 180) / 360 * cols),
+            Math.ceil((camera.centreLon + dLon + 180) / 360 * cols)];
+    }
+    for (y = Math.max(0, y0); y < Math.min(level.rows, y1); y++) {
+      if (xs === null) {
+        for (x = 0; x < cols; x++) out.push([x, y]);
+      } else {
+        for (x = xs[0]; x < xs[1]; x++) out.push([((x % cols) + cols) % cols, y]);
+      }
+    }
+    return out;
+  };
+
+  SatelliteLayer.prototype._tile = function (level, tx, ty) {
+    var key = level.width + '/' + tx + '/' + ty;
+    var hit = this._cache[key];
+    if (hit) { hit.used = this._frame; return hit; }
+    if (this._inflight >= MAX_INFLIGHT) return null;
+
+    var self = this, gl = this.gl;
+    var entry = { tex: null, used: this._frame, loading: true };
+    this._cache[key] = entry;
+    this._inflight++;
+    decodeOffThread('assets/tiles/' + key + '.jpg').then(function (img) {
+      self._inflight--;
+      entry.loading = false;
+      var tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      if (img.close) img.close();
+      entry.tex = tex;
+      self._live++;
+      self._evict();
+      if (self.opts.onReady) self.opts.onReady();
+    }, function () {
+      self._inflight--;
+      // A tile that will not load is simply never drawn: the plate shows
+      // through, which is the same picture at lower detail.
+      delete self._cache[key];
+    });
+    return null;
+  };
+
+  /* Least recently drawn wins. Without this the cache grows with every place
+   * the player visits, which is the memory problem the tiles exist to avoid. */
+  SatelliteLayer.prototype._evict = function () {
+    if (this._live <= MAX_TILES) return;
+    var keys = [], k;
+    for (k in this._cache) {
+      if (this._cache[k].tex) keys.push(k);
+    }
+    keys.sort(function (a, b) { return this._cache[a].used - this._cache[b].used; }.bind(this));
+    while (this._live > MAX_TILES && keys.length) {
+      var key = keys.shift();
+      this.gl.deleteTexture(this._cache[key].tex);
+      delete this._cache[key];
+      this._live--;
+    }
+  };
+
   SatelliteLayer.prototype.render = function (camera) {
     var gl = this.gl;
     if (!gl || this.failed) return;
     gl.clear(gl.COLOR_BUFFER_BIT);
     if (!this.ready) return;
+    this._frame++;
 
     var B = camera.basis(this._basis);
     gl.useProgram(this.prog);
+    // Attribute state is global in WebGL 1, and the tile pass rebinds it, so
+    // the base pass has to set its own up every frame rather than once.
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
+    gl.enableVertexAttribArray(this.aPos);
+    gl.vertexAttribPointer(this.aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.uvBuf);
+    gl.enableVertexAttribArray(this.aUv);
+    gl.vertexAttribPointer(this.aUv, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.idxBuf);
+
     gl.uniform3f(this.u.uEast, B[0], B[1], B[2]);
     gl.uniform3f(this.u.uNorth, B[3], B[4], B[5]);
     gl.uniform3f(this.u.uView, B[6], B[7], B[8]);
     gl.uniform2f(this.u.uCentre, camera.cx, camera.cy);
     gl.uniform2f(this.u.uViewport, this.width, this.height);
     gl.uniform1f(this.u.uRadius, camera.radius);
+    gl.uniform1i(this.u.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     gl.drawElements(gl.TRIANGLES, this.count, gl.UNSIGNED_SHORT, 0);
+
+    var level = this._levelFor(camera);
+    if (!level) return;
+
+    gl.useProgram(this.tileProg);
+    if (this.aPos !== this.tAUv) gl.disableVertexAttribArray(this.aPos);
+    if (this.aUv !== this.tAUv) gl.disableVertexAttribArray(this.aUv);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.patchUvBuf);
+    gl.enableVertexAttribArray(this.tAUv);
+    gl.vertexAttribPointer(this.tAUv, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.patchIdxBuf);
+
+    gl.uniform3f(this.tu.uEast, B[0], B[1], B[2]);
+    gl.uniform3f(this.tu.uNorth, B[3], B[4], B[5]);
+    gl.uniform3f(this.tu.uView, B[6], B[7], B[8]);
+    gl.uniform2f(this.tu.uCentre, camera.cx, camera.cy);
+    gl.uniform2f(this.tu.uViewport, this.width, this.height);
+    gl.uniform1f(this.tu.uRadius, camera.radius);
+    gl.uniform1i(this.tu.uTex, 0);
+
+    var want = this._visibleTiles(camera, level);
+    var du = 1 / level.cols, dv = 1 / level.rows;
+    for (var i = 0; i < want.length; i++) {
+      var t = this._tile(level, want[i][0], want[i][1]);
+      if (!t || !t.tex) continue;
+      gl.uniform4f(this.tu.uRect, want[i][0] * du, want[i][1] * dv, du, dv);
+      gl.bindTexture(gl.TEXTURE_2D, t.tex);
+      gl.drawElements(gl.TRIANGLES, this.tileCount, gl.UNSIGNED_SHORT, 0);
+    }
   };
 
   MT.SatelliteLayer = SatelliteLayer;
