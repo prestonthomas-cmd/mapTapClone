@@ -176,15 +176,41 @@
     this._basis = new Float64Array(9);
   }
 
+  /* Peak bytes to put a 2:1 plate of this width on the GPU: the decoded copy
+   * and the mipmapped texture exist at the same time during the upload. */
+  function peakBytes(width) {
+    return width * (width / 2) * 4 * (1 + 4 / 3);
+  }
+
+  /* MAX_TEXTURE_SIZE is what the GPU can address, not what the device can
+   * afford, and the difference is the whole problem: an iPhone reports 16384
+   * and is then killed by the OS partway through a 16384 plate, which peaks
+   * around 1.2 GB. So plates are also checked against a memory budget.
+   *
+   * navigator.deviceMemory is Chromium-only, so Safari - every iPhone - takes
+   * the conservative branch by default rather than the optimistic one. */
+  function memoryBudgetBytes() {
+    var MB = 1048576;
+    if (navigator.deviceMemory) return navigator.deviceMemory * 1024 * 0.10 * MB;
+    var coarse = typeof matchMedia === 'function' &&
+                 matchMedia('(pointer: coarse)').matches;
+    return (coarse ? 384 : 512) * MB;
+  }
+
   /* Loads the small plate for an immediate picture, then progressively larger
-   * ones. Plates wider than the GPU can hold are skipped rather than failing
-   * at upload time - plenty of mobile GPUs still cap out at 4096. */
+   * ones. Plates the GPU cannot address, or the device cannot afford, are
+   * skipped rather than failing at upload time or taking the tab down. */
   SatelliteLayer.prototype.loadTextures = function (sources) {
     var max = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) || 4096;
     this.maxTextureSize = max;
+    var budget = memoryBudgetBytes();
+    this.memoryBudget = budget;
 
-    var usable = (sources || []).filter(function (s) { return s.width <= max; });
+    var usable = (sources || []).filter(function (s) {
+      return s.width <= max && peakBytes(s.width) <= budget;
+    });
     usable.sort(function (a, b) { return a.width - b.width; });
+    this.plateWidth = usable.length ? usable[usable.length - 1].width : 0;
 
     this._deferred = usable.filter(function (s) { return s.defer; });
     this._runChain(usable.filter(function (s) { return !s.defer; }));
@@ -217,13 +243,57 @@
     this._chain = chain.catch(function () { /* a missing plate leaves the last good one */ });
   };
 
-  SatelliteLayer.prototype._loadOne = function (url, width) {
-    var self = this;
+  /* Decoding is the part that freezes the page. texImage2D decodes on the spot
+   * if the image is not already decoded, and a 34-megapixel JPEG takes long
+   * enough to do that on the main thread to drop the tab into a visible stall.
+   * `decoding = 'async'` is only a hint and does not cover this, so the pixels
+   * are decoded off-thread first and only then handed to the GPU:
+   * createImageBitmap where it exists, img.decode() as the fallback. */
+  function decodeOffThread(url) {
+    // fetch() cannot read a file:// URL - the request is refused as cross
+    // origin - so from disk go straight to the Image path rather than logging
+    // a CORS failure for every plate on the way to the same place.
+    var canFetch = typeof fetch === 'function' &&
+                   !(typeof location !== 'undefined' && location.protocol === 'file:');
+    if (typeof createImageBitmap === 'function' && canFetch) {
+      return fetch(url)
+        .then(function (r) {
+          if (!r.ok) throw new Error('texture failed: ' + url);
+          return r.blob();
+        })
+        .then(function (b) { return createImageBitmap(b); })
+        .catch(function () { return decodeViaImage(url); });
+    }
+    return decodeViaImage(url);
+  }
+
+  function decodeViaImage(url) {
     return new Promise(function (resolve, reject) {
       var img = new Image();
       img.decoding = 'async';
       img.onload = function () {
-        if (width <= self.resolution) { resolve(); return; }   // never downgrade
+        if (typeof img.decode === 'function') {
+          img.decode().then(function () { resolve(img); }, function () { resolve(img); });
+        } else {
+          resolve(img);
+        }
+      };
+      img.onerror = function () { reject(new Error('texture failed: ' + url)); };
+      img.src = url;
+    });
+  }
+
+  SatelliteLayer.prototype._loadOne = function (url, width) {
+    var self = this;
+    return decodeOffThread(url).then(function (img) {
+      return new Promise(function (resolve) {
+        // never downgrade - a smaller plate released later must not replace a
+        // larger one already uploaded
+        if (width <= self.resolution) {
+          if (img.close) img.close();
+          resolve();
+          return;
+        }
         var gl = self.gl;
         gl.bindTexture(gl.TEXTURE_2D, self.tex);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -240,13 +310,15 @@
           gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT,
                            gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT));
         }
+        // The GPU has its own copy now. Release the decoded one rather than
+        // waiting for a collection - at this size it is hundreds of megabytes.
+        if (img.close) img.close();
+
         self.resolution = width;
         self.ready = true;
         if (self.opts.onReady) self.opts.onReady();
         resolve();
-      };
-      img.onerror = function () { reject(new Error('texture failed: ' + url)); };
-      img.src = url;
+      });
     });
   };
 

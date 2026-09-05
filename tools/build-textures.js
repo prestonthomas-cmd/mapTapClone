@@ -26,9 +26,20 @@ const BUNDLED = path.join(__dirname, 'node_modules', 'three-globe',
 // is applied on top of a dark page.
 const tone = (img) => img.modulate({ brightness: 1.10, saturation: 1.14 }).linear(1.04, -4);
 
-/* 8192 is the practical ceiling for a web game: about 3-4 MB, and within the
- * MAX_TEXTURE_SIZE of essentially every GPU that reports more than 4096. A
- * 16384 tier is a 12 MB+ download, so it is opt-in via --max=16384. */
+/* 8192 is the ceiling for a web game, and the limit is memory rather than
+ * bandwidth or what the GPU can address.
+ *
+ * A plate costs width * height * 4 bytes decoded, and the decoded copy and the
+ * mipmapped texture are both resident during the upload - about 2.3x the base
+ * figure at peak. For 8192 that is 299 MB, which devices carry. For 16384 it
+ * is 1195 MB, which they do not: phones report MAX_TEXTURE_SIZE 16384 and are
+ * then killed by the OS partway through the upload. A 16384 tier was built and
+ * shipped once and had to be withdrawn for exactly that.
+ *
+ * --max=16384 still builds one, because the file is fine and a tiled renderer
+ * could use it. The runtime will not load it as a single plate: see the
+ * memory budget in js/satellite.js, which no device can satisfy at that size.
+ */
 const DEFAULT_MAX_WIDTH = 8192;
 const maxArg = process.argv.find((a) => a.startsWith('--max='));
 const MAX_WIDTH = maxArg ? Number(maxArg.split('=')[1]) : DEFAULT_MAX_WIDTH;
