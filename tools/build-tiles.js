@@ -15,6 +15,11 @@
  *
  * Levels are the plate widths they continue: LEVELS below are the full-globe
  * width each pyramid level would have. The plates cover everything below.
+ *
+ * 65536 is the last level worth cutting from this source. It is 611 m per
+ * pixel against the source's own 464, so the next level up would mostly be
+ * resampling detail that is not there. It is also where the cost lands: 8192
+ * of the 10752 tiles and most of the bytes, because each level quadruples.
  */
 const fs = require('fs');
 const path = require('path');
@@ -24,7 +29,7 @@ const OUT = path.join(__dirname, '..', 'assets', 'tiles');
 const SOURCE_DIR = path.join(__dirname, 'source');
 
 const TILE = 512;
-const LEVELS = [16384, 32768];
+const LEVELS = [16384, 32768, 65536];
 const QUALITY = 82;
 
 /* Tiles are square and the globe is 2:1, so a level of width W is W/TILE by
@@ -62,24 +67,44 @@ async function cutLevel(src, width, report) {
     throw new Error(`Level ${width} does not divide evenly into a ${src.cols}x${src.rows} source grid.`);
   }
   const cellW = perX * TILE, cellH = perY * TILE;
+  const ROW = TILE * 3, STRIDE = cellW * 3;
   let written = 0, bytes = 0;
 
   for (const t of src.tiles) {
     const raw = await open(t.path).resize(cellW, cellH, { kernel: 'lanczos3' })
                                   .removeAlpha().raw().toBuffer();
-    const cell = sharp(raw, { raw: { width: cellW, height: cellH, channels: 3 } });
+    // limitInputPixels again: the cell for the 65536 level is 16384 square,
+    // which is 268435456 pixels against sharp's default ceiling of 268402689.
+    // It clears it by 0.01%, so the level fails on its very first tile.
+    /* The cut copies rows out of the raw buffer rather than asking sharp to
+     * extract a window from it. An extract costs a pass over the whole cell,
+     * which at the 65536 level is 768 MB for every one of 1024 tiles and put
+     * the build on a five hour pace. Copying 512 rows is the same picture for
+     * a thousandth of the memory traffic. */
+    const jobs = [];
     for (let ly = 0; ly < perY; ly++) {
       for (let lx = 0; lx < perX; lx++) {
+        const buf = Buffer.allocUnsafe(TILE * ROW);
+        for (let row = 0; row < TILE; row++) {
+          const from = (ly * TILE + row) * STRIDE + lx * ROW;
+          raw.copy(buf, row * ROW, from, from + ROW);
+        }
         const tx = t.col * perX + lx, ty = t.row * perY + ly;
         const dir = path.join(OUT, String(width), String(tx));
         fs.mkdirSync(dir, { recursive: true });
-        const file = path.join(dir, ty + '.jpg');
-        const info = await cell.clone()
-          .extract({ left: lx * TILE, top: ly * TILE, width: TILE, height: TILE })
-          .jpeg({ quality: QUALITY, chromaSubsampling: '4:4:4', mozjpeg: true })
-          .toFile(file);
-        written++; bytes += info.size;
+        jobs.push({ buf: buf, file: path.join(dir, ty + '.jpg') });
       }
+    }
+    // Encoding is what is left, and sharp releases the loop while it works, so
+    // run a few at a time instead of one after another.
+    const LANES = 4;
+    for (let i = 0; i < jobs.length; i += LANES) {
+      const infos = await Promise.all(jobs.slice(i, i + LANES).map(function (j) {
+        return sharp(j.buf, { raw: { width: TILE, height: TILE, channels: 3 } })
+          .jpeg({ quality: QUALITY, chromaSubsampling: '4:4:4', mozjpeg: true })
+          .toFile(j.file);
+      }));
+      infos.forEach(function (info) { written++; bytes += info.size; });
     }
     report(t, written);
   }
@@ -87,6 +112,21 @@ async function cutLevel(src, width, report) {
 }
 
 const mb = (n) => (n / 1048576).toFixed(1) + ' MB';
+
+/* What a level directory already holds, so a rerun after a failure further up
+ * the pyramid does not recut the levels that already succeeded. */
+function countTiles(dir) {
+  let n = 0, bytes = 0;
+  for (const x of fs.readdirSync(dir)) {
+    const sub = path.join(dir, x);
+    if (!fs.statSync(sub).isDirectory()) continue;
+    for (const f of fs.readdirSync(sub)) {
+      if (!/\.jpg$/i.test(f)) continue;
+      n++; bytes += fs.statSync(path.join(sub, f)).size;
+    }
+  }
+  return { n: n, bytes: bytes };
+}
 
 (async () => {
   if (!fs.existsSync(SOURCE_DIR)) {
@@ -97,9 +137,17 @@ const mb = (n) => (n / 1048576).toFixed(1) + ' MB';
   try { src = findTiles(); } catch (e) { console.error(e.message); process.exit(1); }
   console.log(`source: ${src.tiles.length} tiles in a ${src.cols}x${src.rows} grid`);
 
-  fs.rmSync(OUT, { recursive: true, force: true });
   const levels = [];
   for (const width of LEVELS) {
+    const gx = width / TILE, gy = width / 2 / TILE;
+    const dir = path.join(OUT, String(width));
+    const have = fs.existsSync(dir) ? countTiles(dir) : { n: 0, bytes: 0 };
+    if (have.n === gx * gy) {
+      console.log(`level ${width}: already complete, ${have.n} tiles, ${mb(have.bytes)}`);
+      levels.push({ width: width, cols: gx, rows: gy, tile: TILE, bytes: have.bytes });
+      continue;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
     process.stdout.write(`level ${width}: `);
     const r = await cutLevel(src, width, () => process.stdout.write('.'));
     console.log(` ${r.written} tiles, ${mb(r.bytes)}`);

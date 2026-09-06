@@ -182,10 +182,35 @@
   }
 
   /* Tiles resident at once. Each is 512px - 1 MB of RGBA, 1.4 with mipmaps -
-   * so 48 is about 64 MB, well under what one large plate costs and bounded
-   * however far the player zooms. */
-  var MAX_TILES = 48;
+   * so 56 is about 75 MB, well under what one large plate costs and bounded
+   * however far the player zooms.
+   *
+   * TILE_BUDGET caps how many one view may ask for, and is the reason the
+   * bound holds. Two things push the count up badly without it: a view sitting
+   * at the bottom of a level's octave needs four times the tiles of one at the
+   * top, and a near-polar view crosses most columns of an equirectangular grid
+   * however small the cap actually is. Measured over 1168 random cameras the
+   * uncapped count ran to a median of 36 and a maximum of 576. */
+  var MAX_TILES_CAP = 56;
+  var TILE_BUDGET_CAP = 32;
   var MAX_INFLIGHT = 6;
+  var TILE_BYTES = 512 * 512 * 4 * (1 + 4 / 3);   // one tile, mipmapped
+
+  /* The cache is sized from the same budget the plate is chosen against, so a
+   * phone does not end up carrying the largest plate it can afford and then a
+   * further 75 MB of tiles on top of it. */
+  function tileCacheSize(budget) {
+    var n = Math.round(budget * 0.20 / TILE_BYTES);
+    return Math.max(12, Math.min(MAX_TILES_CAP, n));
+  }
+
+  /* What one view may ask for. Kept below the cache so a single view cannot
+   * evict tiles it is still using - that thrashes, refetching the same tiles
+   * every frame. The cap comes from measurement: over 1168 random cameras a
+   * budget of 32 held the median at 19 tiles. */
+  function tileBudget(cacheSize) {
+    return Math.max(8, Math.min(TILE_BUDGET_CAP, Math.floor(cacheSize * 0.7)));
+  }
 
   function SatelliteLayer(canvas, options) {
     this.canvas = canvas;
@@ -329,6 +354,8 @@
     this.maxTextureSize = max;
     var budget = memoryBudgetBytes();
     this.memoryBudget = budget;
+    this.maxTiles = tileCacheSize(budget);
+    this.tileBudget = tileBudget(this.maxTiles);
 
     var usable = (sources || []).filter(function (s) {
       return s.width <= max && peakBytes(s.width) <= budget;
@@ -460,12 +487,22 @@
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
   };
 
-  /* Which pyramid level is worth drawing. A level of width W puts W/2 texels
-   * across the visible hemisphere; at zoom z the viewport spans 1/z of that
-   * over `discPx` device pixels, so the level is adequate while W >= 2 z discPx.
-   * Returns null when the plate already resolves everything on screen, which is
-   * the common case and costs nothing. */
-  SatelliteLayer.prototype._levelFor = function (camera) {
+  /* Picks the level to draw and the tiles to draw it with, or null for the
+   * plate alone.
+   *
+   * A level of width W puts W/2 texels across the visible hemisphere; at zoom z
+   * the viewport spans 1/z of that over `discPx` device pixels, so W = 2 z
+   * discPx is the level that lands texel for pixel. The nearest level to that
+   * in log space is taken rather than the next one up: rounding up always lands
+   * at the bottom of an octave, where the texture is twice as fine as the
+   * screen can show and needs four times the tiles to say the same thing.
+   *
+   * Then the count is capped. If the chosen level wants more tiles than the
+   * budget, a coarser one is tried, which needs a quarter as many; if even the
+   * coarsest does not fit - a view over a pole, where every column of an
+   * equirectangular grid crosses the cap - the plate carries it alone. Softer,
+   * but bounded, and the poles are ice. */
+  SatelliteLayer.prototype._select = function (camera) {
     if (!this.tiles) return null;
     var discPx = camera.radius * (this.dpr || 1) * 2;
     var want = discPx * 2;                       // texels needed across the globe
@@ -473,11 +510,22 @@
     // one currently uploaded: during startup `resolution` is still the 1K
     // placeholder, and comparing against that asks for tiles the plate on its
     // way is about to make pointless.
-    if ((this.plateWidth || this.resolution) >= want) return null;
-    for (var i = 0; i < this.tiles.length; i++) {
-      if (this.tiles[i].width >= want) return this.tiles[i];
+    var plate = this.plateWidth || this.resolution;
+    if (plate >= want) return null;
+
+    var best = 0, i;
+    for (i = 1; i < this.tiles.length; i++) {
+      if (Math.abs(Math.log(this.tiles[i].width / want)) <
+          Math.abs(Math.log(this.tiles[best].width / want))) best = i;
     }
-    return this.tiles[this.tiles.length - 1];
+    for (i = best; i >= 0; i--) {
+      if (this.tiles[i].width <= plate) break;   // the plate is finer than this
+      var list = this._visibleTiles(camera, this.tiles[i]);
+      if (list.length <= (this.tileBudget || TILE_BUDGET_CAP)) {
+        return { level: this.tiles[i], list: list };
+      }
+    }
+    return null;
   };
 
   /* The tiles overlapping the visible cap, as [x, y] index pairs. Near a pole
@@ -485,18 +533,26 @@
    * trying to invert a wrap that has no answer. */
   SatelliteLayer.prototype._visibleTiles = function (camera, level) {
     var half = Math.sqrt(this.width * this.width + this.height * this.height) / 2;
-    var ang = camera.visibleAngle(half) * 180 / Math.PI + 1.0;   // degrees, padded
+    // Padded proportionally rather than by a fixed degree: a degree is a tenth
+    // of a tile at the coarsest level and over a third at the finest, so a
+    // fixed pad quietly fetches a whole extra ring of tiles as levels get
+    // finer. The margin covers the small-angle approximation in the longitude
+    // span below and the patch mesh's straight edges.
+    var ang = camera.visibleAngle(half) * 180 / Math.PI * 1.1 + 0.2;
     var lat0 = camera.centreLat - ang, lat1 = camera.centreLat + ang;
     var y0 = Math.floor((90 - Math.min(90, lat1)) / 180 * level.rows);
     var y1 = Math.ceil((90 - Math.max(-90, lat0)) / 180 * level.rows);
 
     var out = [], x, y, cols = level.cols;
-    var wide = Math.abs(camera.centreLat) + ang >= 89;
+    // Every column, but only when the cap really reaches over the pole. Testing
+    // at 89 fired a degree early and took all 128 columns at the finest level
+    // for a view whose true span is a few dozen degrees.
+    var wide = Math.abs(camera.centreLat) + ang >= 90;
     var xs;
     if (wide) {
       xs = null;                                  // all columns
     } else {
-      var k = Math.cos(Math.max(Math.abs(lat0), Math.abs(lat1)) * Math.PI / 180);
+      var k = Math.cos(Math.min(89.99, Math.max(Math.abs(lat0), Math.abs(lat1))) * Math.PI / 180);
       var dLon = k > 1e-6 ? Math.min(180, ang / k) : 180;
       xs = [Math.floor((camera.centreLon - dLon + 180) / 360 * cols),
             Math.ceil((camera.centreLon + dLon + 180) / 360 * cols)];
@@ -550,13 +606,14 @@
   /* Least recently drawn wins. Without this the cache grows with every place
    * the player visits, which is the memory problem the tiles exist to avoid. */
   SatelliteLayer.prototype._evict = function () {
-    if (this._live <= MAX_TILES) return;
+    var cap = this.maxTiles || MAX_TILES_CAP;
+    if (this._live <= cap) return;
     var keys = [], k;
     for (k in this._cache) {
       if (this._cache[k].tex) keys.push(k);
     }
     keys.sort(function (a, b) { return this._cache[a].used - this._cache[b].used; }.bind(this));
-    while (this._live > MAX_TILES && keys.length) {
+    while (this._live > cap && keys.length) {
       var key = keys.shift();
       this.gl.deleteTexture(this._cache[key].tex);
       delete this._cache[key];
@@ -594,8 +651,9 @@
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     gl.drawElements(gl.TRIANGLES, this.count, gl.UNSIGNED_SHORT, 0);
 
-    var level = this._levelFor(camera);
-    if (!level) return;
+    var sel = this._select(camera);
+    if (!sel) return;
+    var level = sel.level;
 
     gl.useProgram(this.tileProg);
     if (this.aPos !== this.tAUv) gl.disableVertexAttribArray(this.aPos);
@@ -613,7 +671,7 @@
     gl.uniform1f(this.tu.uRadius, camera.radius);
     gl.uniform1i(this.tu.uTex, 0);
 
-    var want = this._visibleTiles(camera, level);
+    var want = sel.list;
     var du = 1 / level.cols, dv = 1 / level.rows;
     for (var i = 0; i < want.length; i++) {
       var t = this._tile(level, want[i][0], want[i][1]);

@@ -170,12 +170,23 @@ Zoomed in, the globe is not the plate. A single texture covering the whole plane
 floor under how sharp it can be — 8192 wide is 4.9 km per pixel — and going wider does not
 work: a 16384 plate needs about 1.2 GB to upload and takes a phone's browser down. So
 detail past that comes from `assets/tiles/`, cut from the same source by
-`tools/build-tiles.js`: 2560 tiles over two levels, 58 MB, reaching 1.2 km per pixel.
+`tools/build-tiles.js`: 10 752 tiles over three levels, 183 MB, reaching **611 m per pixel** —
+eight times the plate, and close to the 464 m the source itself holds.
 
-Only the tiles under the viewport are fetched and only 48 are held at once, so the detail
-costs about 64 MB however far you zoom — less than the one plate it improves on. Tiles are
-drawn over the plate with the same shading, so a missing one is invisible apart from being
-softer, and the game works with none of them at all.
+Only the tiles under the viewport are fetched, and both how many one view may ask for and how
+many are kept are sized from the device's own memory: a phone holds about 33 and asks for at
+most 23, a desktop 56 and 32. So the detail costs 60–130 MB however far you zoom, less than
+the single plate it improves on, and the bound does not depend on where the player goes.
+
+Two things would break that bound without the cap. A view sitting at the bottom of a level's
+octave needs four times the tiles of one at the top, so the level nearest in log space is
+taken rather than the next one up; and a near-polar view crosses most columns of an
+equirectangular grid however small the visible cap is, so when even the coarsest level will
+not fit, the plate carries it alone. Checked against 280 000 unprojected screen pixels over
+1168 random cameras: no pixel ever lands outside the tiles fetched for it.
+
+Tiles are drawn over the plate with the same shading, so a missing one is invisible apart
+from being softer, and the game works with none of them at all.
 
 
 ## Not affiliated with MapTap
