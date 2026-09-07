@@ -189,6 +189,35 @@ Tiles are drawn over the plate with the same shading, so a missing one is invisi
 from being softer, and the game works with none of them at all.
 
 
+## Practice by continent
+
+Alongside the daily and numbered practice games there is a run per continent: every UN
+member state in it, one at a time, in a seeded shuffle so a run can be shared or replayed.
+
+| | countries |
+| --- | --- |
+| Africa | 54 |
+| Asia | 46 |
+| Europe | 45 |
+| North America | 23 |
+| South America | 12 |
+| Oceania | 14 |
+
+These rounds ask for a country, not a city, so they are scored against the country itself:
+zero distance anywhere inside it — a full 100 — and otherwise the distance to its border.
+Scoring against a country's centre instead would mark a correct answer wrong in proportion
+to how large the country is.
+
+The test is run against the named country's own polygon rather than by asking which country
+the tap landed in, and the difference is not academic: Natural Earth's disputed boundaries
+overlap, so a tap inside Israel comes back as Palestine from a "which country is this?"
+lookup, and a player who was right would have been told they missed.
+
+`tools/build-data.js` generates `data/continents.js` and gives each country a point that is
+genuinely inside it — checked for all 194, which needed a fallback for archipelagos, since
+the middle of the Bahamas is open sea. Tuvalu has no polygon at Natural Earth's 50m
+generalisation and is scored from its point instead.
+
 ## Not affiliated with MapTap
 
 This is an independent reimplementation written from the game's public description, for

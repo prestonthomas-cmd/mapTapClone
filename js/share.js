@@ -4,7 +4,11 @@
 
   var SQUARES = ['🟩', '🟨', '🟧', '🟥', '⬛'];
 
-  function gameLabel(mode, number) {
+  function gameLabel(mode, number, game) {
+    if (mode === 'continent') {
+      return (game && game.continent ? game.continent : 'Continent') +
+             (game && game.rounds ? ' — ' + game.rounds.length + ' countries' : '');
+    }
     return (mode === 'daily' ? 'Daily #' : 'Practice #') + number;
   }
 
@@ -13,8 +17,8 @@
   function linkFor(mode, number) {
     if (location.protocol === 'file:') return '';
     if (!location.origin || location.origin === 'null') return '';
-    return location.origin + location.pathname +
-           '?' + (mode === 'daily' ? 'd=' : 'p=') + number;
+    var key = mode === 'daily' ? 'd=' : (mode === 'continent' ? 'c=' : 'p=');
+    return location.origin + location.pathname + '?' + key + encodeURIComponent(number);
   }
 
   /* A round per line: the proximity square plus what that round was worth.
@@ -29,9 +33,10 @@
       return Math.max(w, String(r.points).length);
     }, 0);
 
+    var max = MT.puzzle.maxScore(game);
     var lines = [
-      'MapTap Clone — ' + gameLabel(game.mode, game.number),
-      total + '/' + MT.puzzle.MAX_SCORE + '  ' + MT.puzzle.grade(total),
+      'MapTap Clone — ' + gameLabel(game.mode, game.number, game),
+      total + '/' + max + '  ' + MT.puzzle.grade(total, max),
       ''
     ];
     results.forEach(function (r) {
@@ -41,7 +46,8 @@
                  (r.multiplier > 1 ? '  ×' + r.multiplier : ''));
     });
 
-    var link = linkFor(game.mode, game.number);
+    var link = linkFor(game.mode,
+      game.mode === 'continent' ? game.continent + '.' + game.number : game.number);
     if (link) {
       lines.push('');
       lines.push(link);

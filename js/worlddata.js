@@ -159,5 +159,60 @@
     return null;
   }
 
-  MT.world = { load: load, countryAt: countryAt, decodeRing: decodeRing };
+  /* Rings grouped by country, built once on first use. */
+  var byCc = null;
+  function ringsFor(cc) {
+    if (!byCc) {
+      byCc = Object.create(null);
+      var all = load().high;
+      for (var i = 0; i < all.length; i++) {
+        var r = all[i];
+        if (!r.cc) continue;
+        (byCc[r.cc] || (byCc[r.cc] = [])).push(r);
+      }
+    }
+    return byCc[cc] || null;
+  }
+
+  /* How far a point is from a named country: 0 anywhere inside it, otherwise
+   * kilometres to the nearest point on its border.
+   *
+   * This asks whether the point is in *this* country rather than which country
+   * it is in, and the difference matters. Natural Earth's disputed boundaries
+   * overlap, so countryAt returns whichever polygon it meets first - a point in
+   * Israel comes back as PS - and a player who tapped the right country would
+   * be told they had missed. Asking the named country's own rings cannot make
+   * that mistake.
+   *
+   * Returns null for a country with no polygon at this generalisation, so the
+   * caller can fall back to distance from its representative point. */
+  function distanceToCountryKm(cc, lon, lat) {
+    var rings = ringsFor(cc);
+    if (!rings) return null;
+
+    var polys = Object.create(null), i;
+    for (i = 0; i < rings.length; i++) {
+      if (!ringContains(rings[i].pts, lon, lat)) continue;
+      polys[rings[i].poly] = (polys[rings[i].poly] || 0) + 1;
+    }
+    // Odd means inside; even means the point sits in a hole.
+    for (var key in polys) if (polys[key] % 2 === 1) return 0;
+
+    var best = Infinity;
+    for (i = 0; i < rings.length; i++) {
+      var pts = rings[i].pts;
+      for (var k = 0; k < pts.length; k += 2) {
+        var km = geo.distanceKm(lat, lon, pts[k + 1], pts[k]);
+        if (km < best) best = km;
+      }
+    }
+    return best === Infinity ? null : best;
+  }
+
+  MT.world = {
+    load: load,
+    countryAt: countryAt,
+    decodeRing: decodeRing,
+    distanceToCountryKm: distanceToCountryKm
+  };
 })(window.MT = window.MT || {});

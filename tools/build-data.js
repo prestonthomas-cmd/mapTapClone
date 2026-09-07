@@ -217,6 +217,126 @@ function round(n, dp) {
   return Math.round(n * f) / f;
 }
 
+/* ------------------------------------------------------------------ *
+ * Continents
+ * ------------------------------------------------------------------ */
+
+/* The practice-by-continent sets. UN membership is the line for "a country",
+ * which is defensible and checkable, and keeps out the territories the city
+ * pool deliberately allows (Hong Kong is a fine place to tap for, and not a
+ * country to be asked for).
+ *
+ * world-countries lumps the Americas into one region, which is not how anyone
+ * learns them, so the subregion splits it back into two. */
+const CONTINENT_ORDER = ['Africa', 'Asia', 'Europe', 'North America',
+                         'South America', 'Oceania'];
+
+function continentOf(meta) {
+  if (meta.region !== 'Americas') return meta.region;
+  return meta.subregion === 'South America' ? 'South America' : 'North America';
+}
+
+/* A point to fly to when the answer is revealed, and the fallback the score
+ * falls back on for a country with no polygon. world-countries' own latlng is
+ * usually inside the country but is a bounding-box centre, so it lands in the
+ * sea for a crescent like Vietnam; where that happens the largest ring's
+ * vertex average is tried instead, and whichever lands inside wins. */
+function representativePoint(meta, rings) {
+  const candidates = [];
+  if (meta.latlng && meta.latlng.length === 2) {
+    candidates.push([meta.latlng[1], meta.latlng[0]]);
+  }
+  if (rings && rings.length) {
+    let biggest = rings[0];
+    for (const r of rings) if (r.length > biggest.length) biggest = r;
+    let sx = 0, sy = 0;
+    for (const p of biggest) { sx += p[0]; sy += p[1]; }
+    candidates.push([sx / biggest.length, sy / biggest.length]);
+  }
+  for (const c of candidates) {
+    if (rings && rings.length && pointInRings(c[0], c[1], rings)) return c;
+  }
+  // Neither lands inside for an archipelago - the Bahamas' centre is open sea
+  // between the islands, and so is the Marshall Islands'. Sweep the largest
+  // ring's own box for a point that is genuinely on land.
+  if (rings && rings.length) {
+    let biggest = rings[0];
+    for (const r of rings) if (r.length > biggest.length) biggest = r;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const p of biggest) {
+      if (p[0] < x0) x0 = p[0];
+      if (p[0] > x1) x1 = p[0];
+      if (p[1] < y0) y0 = p[1];
+      if (p[1] > y1) y1 = p[1];
+    }
+    const N = 24;
+    for (let iy = 1; iy < N; iy++) {
+      for (let ix = 1; ix < N; ix++) {
+        const lon = x0 + ((x1 - x0) * ix) / N;
+        const lat = y0 + ((y1 - y0) * iy) / N;
+        if (pointInRings(lon, lat, rings)) return [lon, lat];
+      }
+    }
+  }
+  return candidates[0] || null;
+}
+
+/* Even-odd, matching how the game itself resolves a tap. */
+function pointInRings(lon, lat, rings) {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if ((yi > lat) !== (yj > lat) &&
+          lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/* Raw (unencoded) 50m rings per country code, for the point-in-country work
+ * that picking a representative point needs. */
+function rawRingsByCc() {
+  const topo = require('world-atlas/countries-50m.json');
+  const fc = topojson.feature(topo, topo.objects.countries);
+  const out = new Map();
+  for (const f of fc.features) {
+    if (!f.geometry) continue;
+    const cc = numericToAlpha2.get(String(Number(f.id)));
+    if (!cc) continue;
+    const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    const rings = out.get(cc) || [];
+    for (const poly of polys) for (const ring of poly) rings.push(ring);
+    out.set(cc, rings);
+  }
+  return out;
+}
+
+function buildContinents() {
+  const rings = rawRingsByCc();
+  const groups = {};
+  const noPolygon = [];
+  for (const meta of countries) {
+    if (!meta.unMember) continue;
+    const name = continentOf(meta);
+    if (!CONTINENT_ORDER.includes(name)) continue;
+    const r = rings.get(meta.cca2);
+    if (!r || !r.length) noPolygon.push(meta.cca2);
+    const pt = representativePoint(meta, r);
+    if (!pt) continue;
+    (groups[name] = groups[name] || []).push({
+      cc: meta.cca2,
+      n: meta.name.common,
+      lat: round(pt[1], 3),
+      lon: round(pt[0], 3),
+    });
+  }
+  for (const k of Object.keys(groups)) {
+    groups[k].sort((a, b) => a.n.localeCompare(b.n));
+  }
+  return { groups, noPolygon };
+}
+
 function main() {
   fs.mkdirSync(OUT, { recursive: true });
 
@@ -248,10 +368,25 @@ function main() {
     'window.MT_CITIES = ' + JSON.stringify(payload) + ';\n';
   fs.writeFileSync(path.join(OUT, 'cities.js'), citiesJs);
 
+  const { groups, noPolygon } = buildContinents();
+  const continentsJs =
+    '/* Generated by tools/build-data.js - do not edit by hand.\n' +
+    '   UN member states grouped by continent, each with a point inside it.\n' +
+    '   Country metadata from world-countries (ODbL). */\n' +
+    'window.MT_CONTINENTS = ' + JSON.stringify({ order: CONTINENT_ORDER, groups: groups }) + ';\n';
+  fs.writeFileSync(path.join(OUT, 'continents.js'), continentsJs);
+
   const byTier = [1, 2, 3, 4, 5].map((t) => cities.filter((c) => c.tier === t).length);
   console.log(`world.js   ${(worldJs.length / 1024).toFixed(0)} KB  (${world.low.length} low-detail / ${world.high.length} high-detail features)`);
   console.log(`cities.js  ${(citiesJs.length / 1024).toFixed(0)} KB  ${cities.length} cities across ${Object.keys(countryNames).length} countries`);
   console.log(`tiers      ${byTier.join(' / ')}`);
+  const total = CONTINENT_ORDER.reduce((n, k) => n + (groups[k] ? groups[k].length : 0), 0);
+  console.log(`continents ${(continentsJs.length / 1024).toFixed(0)} KB  ${total} countries: ` +
+              CONTINENT_ORDER.map((k) => `${k} ${groups[k] ? groups[k].length : 0}`).join(', '));
+  if (noPolygon.length) {
+    console.log(`note: no polygon at 50m for ${noPolygon.join(', ')} - scored by ` +
+                'distance to their point rather than to their border.');
+  }
 }
 
 main();

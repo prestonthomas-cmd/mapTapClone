@@ -30,6 +30,47 @@
     return next.getTime() - now.getTime();
   }
 
+  /* Every UN member of one continent, in a seeded order so a run can be shared
+   * or replayed. Countries are not ranked by difficulty the way the city pool
+   * is - the point is to go through all of them - so the order is a plain
+   * shuffle and every round is worth the same.
+   */
+  function continents() {
+    var data = window.MT_CONTINENTS;
+    return data && data.order ? data.order : [];
+  }
+
+  function continentCountries(name) {
+    var data = window.MT_CONTINENTS;
+    return (data && data.groups && data.groups[name]) || [];
+  }
+
+  function generateContinent(name, number) {
+    var list = continentCountries(name).slice();
+    var rand = MT.rng.create('continent|' + name + '|' + number);
+    for (var i = list.length - 1; i > 0; i--) {       // Fisher-Yates
+      var j = rand.int(i + 1);
+      var t = list[i]; list[i] = list[j]; list[j] = t;
+    }
+    return {
+      mode: 'continent',
+      continent: name,
+      number: number,
+      rounds: list.map(function (c, i) {
+        return {
+          index: i,
+          kind: 'country',
+          city: c.n,                 // the prompt line, as with a city round
+          cc: c.cc,
+          country: name,
+          lat: c.lat,
+          lon: c.lon,
+          multiplier: 1
+        };
+      })
+    };
+  }
+
   /* ------------------------------------------------------------------ *
    * Puzzle construction
    * ------------------------------------------------------------------ */
@@ -170,10 +211,25 @@
     return v < 1 ? 0 : Math.round(v);
   }
 
+  /* Distance for a round: to the city for a city round, to the country itself
+   * for a country round - zero anywhere inside it, otherwise to its border.
+   * A country has no single right point to tap, so scoring one against its
+   * centre would mark a correct answer wrong for the size of the country. */
+  function roundDistanceKm(round, guessLat, guessLon) {
+    if (round.kind === 'country' && MT.world && MT.world.distanceToCountryKm) {
+      var d = MT.world.distanceToCountryKm(round.cc, guessLon, guessLat);
+      if (d !== null) return d;
+      // No polygon at this generalisation - Tuvalu - so fall back to its point.
+    }
+    return MT.geo.distanceKm(round.lat, round.lon, guessLat, guessLon);
+  }
+
   /* `guessCC` is the ISO code the tap landed in, or null over open water. */
   function scoreRound(round, guessLat, guessLon, guessCC) {
-    var d = MT.geo.distanceKm(round.lat, round.lon, guessLat, guessLon);
-    var same = !!guessCC && guessCC === round.cc;   // reported, but not scored
+    var d = roundDistanceKm(round, guessLat, guessLon);
+    var same = round.kind === 'country'
+      ? d === 0                                     // landed in the country
+      : !!guessCC && guessCC === round.cc;          // reported, but not scored
     var base = baseScore(d);
     return {
       distanceKm: d,
@@ -198,10 +254,19 @@
     return 4;
   }
 
-  function grade(total) {
+  /* A game is worth 100 a round times its multipliers. The daily's five rounds
+   * at 1,1,2,3,3 make 1000; a continent run of 54 countries at 1 makes 5400. */
+  function maxScore(game) {
+    if (!game || !game.rounds) return MAX_SCORE;
+    return game.rounds.reduce(function (n, r) { return n + 100 * r.multiplier; }, 0);
+  }
+
+  function grade(total, max) {
     // Anchored to MapTap's own numbers: its players call anything over 900 a
     // good game, and the observed #803 - two easy rounds nailed, both hard
-    // rounds badly missed - scored 752.
+    // rounds badly missed - scored 752. Taken as a share of what was on offer,
+    // so the same thresholds hold for a continent run of any length.
+    total = (total / (max || MAX_SCORE)) * 1000;
     if (total >= 940) return 'Cartographer';
     if (total >= 860) return 'Navigator';
     if (total >= 760) return 'Globetrotter';
@@ -222,6 +287,10 @@
     HALF_MARKS_KM: HALF_MARKS_KM,
     MULTIPLIERS: MULTIPLIERS,
     MAX_SCORE: MAX_SCORE,
+    maxScore: maxScore,
+    continents: continents,
+    continentCountries: continentCountries,
+    generateContinent: generateContinent,
     EPOCH: EPOCH,
     band: band,
     baseScore: baseScore,

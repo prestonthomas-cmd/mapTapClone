@@ -88,6 +88,7 @@
     el.actionbar.hidden = true;
     el.roundSheet.hidden = true;
     setRunningScore(0);
+    setRunningMax(puzzle.MAX_SCORE);
     setGameChip('Daily #' + today);
 
     openPanel(
@@ -106,6 +107,7 @@
           (playedToday ? 'See today’s result — Daily #' + today
                        : 'Play Daily #' + today) + '</button>' +
         '<button class="btn" data-act="practice-random">Practice — random game</button>' +
+        '<button class="btn" data-act="continents">Practice a continent</button>' +
         '<button class="btn btn--ghost" data-act="choose">Play a specific game number</button>' +
         '<button class="btn btn--ghost" data-act="help">How to play</button>' +
       '</div>'
@@ -134,6 +136,12 @@
       '</ul>' +
       '<p>Fitted to MapTap\u2019s own reported scores, so a round here is worth ' +
         'what the same guess is worth there.</p>' +
+      '<h3>Continents</h3>' +
+      '<p><strong>Practice a continent</strong> runs every UN member state in it — ' +
+        'all 54 of Africa, 46 of Asia — one at a time, in a shuffled order. ' +
+        'These ask for a country rather than a city, so tapping anywhere inside it ' +
+        'scores a full 100; miss and you are scored on how far outside its border ' +
+        'you landed. Every country is worth the same.</p>' +
       '<h3>Daily and practice</h3>' +
       '<p>Every game has a number. <strong>Daily #' + puzzle.todayNumber() + '</strong> is the same for ' +
         'everyone today, so scores are comparable. <strong>Practice</strong> games are numbered separately ' +
@@ -176,6 +184,24 @@
     );
   }
 
+  /* One run per continent, every UN member of it, in a shuffled order. */
+  function showContinents() {
+    var buttons = puzzle.continents().map(function (name) {
+      var n = puzzle.continentCountries(name).length;
+      return '<button class="btn" data-act="continent:' + esc(name) + '">' +
+             esc(name) + '<small> · ' + n + ' countries</small></button>';
+    }).join('');
+    openPanel(
+      '<h2>Practice a continent</h2>' +
+      '<p class="panel__sub">Every country in it, one at a time. Tap inside the ' +
+        'country to score full marks; otherwise you are scored on how far outside ' +
+        'it you landed.</p>' +
+      '<div class="panel__actions">' + buttons +
+        '<button class="btn btn--ghost" data-act="' + (state.game ? 'close' : 'menu') + '">Back</button>' +
+      '</div>'
+    );
+  }
+
   function showChooser() {
     var today = puzzle.todayNumber();
     openPanel(
@@ -207,8 +233,34 @@
 
   function setRunningScore(v) { el.runningScore.textContent = v; }
 
+  /* A continent run is out of 100 a country, so the scoreboard cannot assume
+   * the daily's 1000. */
+  function setRunningMax(max) {
+    if (el.runningMax) el.runningMax.textContent = '/ ' + (max || puzzle.MAX_SCORE);
+  }
+
+  function roundCount() {
+    return state.game ? state.game.rounds.length : puzzle.ROUNDS;
+  }
+
   function totalSoFar() {
     return state.results.reduce(function (sum, r) { return sum + r.points; }, 0);
+  }
+
+  function startContinent(name, number) {
+    closePanel();
+    if (!Number.isFinite(number)) number = randomPracticeNumber();
+    state.game = puzzle.generateContinent(name, number);
+    if (!state.game.rounds.length) { toast('No countries for ' + name); showStart(); return; }
+    state.roundIndex = 0;
+    state.results = [];
+    state.pending = null;
+    globe.spin = 0;
+    setGameChip(name + ' — ' + state.game.rounds.length);
+    setRunningScore(0);
+    setRunningMax(puzzle.maxScore(state.game));
+    writeUrl('continent', name + '.' + number);
+    beginRound();
   }
 
   function startGame(mode, number) {
@@ -222,6 +274,7 @@
     globe.spin = 0;
     setGameChip(MT.share.gameLabel(mode, number));
     setRunningScore(0);
+    setRunningMax(puzzle.maxScore(state.game));
     writeUrl(mode, number);
 
     if (played) {
@@ -257,11 +310,18 @@
     el.roundSheet.hidden = true;
     el.prompt.hidden = false;
     el.actionbar.hidden = false;
-    el.promptRound.textContent = 'Round ' + (state.roundIndex + 1) + ' of ' + puzzle.ROUNDS;
+    el.promptRound.textContent = 'Round ' + (state.roundIndex + 1) + ' of ' + roundCount();
+    // Every country in a continent run is worth the same, so there is no
+    // multiplier to show.
+    el.promptMult.hidden = round.multiplier === 1 && state.game.mode === 'continent';
     el.promptMult.textContent = '×' + round.multiplier;
     el.promptCity.textContent = round.city;
-    el.promptCountry.textContent = friendlyCountry(round.cc, round.country);
-    el.actionHint.textContent = 'Tap the globe where you think it is';
+    el.promptCountry.textContent = round.kind === 'country'
+      ? round.country
+      : friendlyCountry(round.cc, round.country);
+    el.actionHint.textContent = round.kind === 'country'
+      ? 'Tap the globe inside this country'
+      : 'Tap the globe where you think it is';
     el.btnSubmit.disabled = true;
 
     // Re-trigger the drop-in animation.
@@ -299,15 +359,30 @@
     globe.frameBoth(guess, [round.lon, round.lat], 950);
 
     el.resultCity.textContent = round.city;
-    el.resultCountry.textContent = friendlyCountry(round.cc, round.country);
+    el.resultCountry.textContent = round.kind === 'country'
+      ? round.country
+      : friendlyCountry(round.cc, round.country);
     el.resultPoints.textContent = '+' + scored.points;
-    el.resultBreakdown.textContent = scored.base + ' × ' + scored.multiplier;
+    el.resultBreakdown.textContent = scored.multiplier > 1
+      ? scored.base + ' × ' + scored.multiplier
+      : scored.base + ' / 100';
     el.resultDistance.innerHTML = describeMiss(guess, round, scored);
-    el.btnNext.textContent = state.roundIndex === puzzle.ROUNDS - 1 ? 'See results' : 'Next round';
+    el.btnNext.textContent = state.roundIndex === roundCount() - 1 ? 'See results' : 'Next round';
     el.roundSheet.hidden = false;
   }
 
   function describeMiss(guess, round, scored) {
+    // A country round is scored against the whole country, so the distance is
+    // to its border and zero means the tap was inside it.
+    if (round.kind === 'country') {
+      if (scored.distanceKm === 0) {
+        return 'Inside <strong>' + esc(round.city) + '</strong>.';
+      }
+      var toward = geo.compassPoint(geo.bearing(round.lat, round.lon, guess[1], guess[0]));
+      return 'You tapped ' + toward + ' of it — <strong>' +
+             esc(puzzle.formatDistance(scored.distanceKm)) + '</strong> from the ' +
+             esc(round.city) + ' border.';
+    }
     if (scored.distanceKm <= puzzle.BULLSEYE_KM) {
       return 'Bullseye — <strong>' + esc(puzzle.formatDistance(scored.distanceKm)) + '</strong> away.';
     }
@@ -323,7 +398,7 @@
 
   function nextRound() {
     el.roundSheet.hidden = true;
-    if (state.roundIndex < puzzle.ROUNDS - 1) {
+    if (state.roundIndex < roundCount() - 1) {
       state.roundIndex++;
       beginRound();
       return;
@@ -340,7 +415,11 @@
         return { base: r.base, distanceKm: Math.round(r.distanceKm), guess: r.guess };
       })
     };
-    if (!(state.game.mode === 'daily' && MT.storage.getDaily(state.game.number))) {
+    // Continent runs are deliberately not recorded. The stats panel averages
+    // scores out of 1000, and a 54-country run out of 5400 would land in the
+    // practice best and average and make both meaningless.
+    if (state.game.mode !== 'continent' &&
+        !(state.game.mode === 'daily' && MT.storage.getDaily(state.game.number))) {
       MT.storage.saveResult(state.game.mode, state.game.number, record);
     }
     showSummary(false);
@@ -348,6 +427,7 @@
 
   function showSummary(replay) {
     var total = totalSoFar();
+    var max = puzzle.maxScore(state.game);
     var isDaily = state.game.mode === 'daily';
     var squares = state.results.map(function (r) { return MT.share.SQUARES[puzzle.band(r.base)]; }).join('');
 
@@ -356,18 +436,20 @@
       return '<div class="breakdown__row">' +
         '<span class="breakdown__sq">' + MT.share.SQUARES[puzzle.band(r.base)] + '</span>' +
         '<span class="breakdown__city">' + esc(round.city) +
-          '<small>' + esc(friendlyCountry(round.cc, round.country)) + '</small></span>' +
+          '<small>' + esc(round.kind === 'country'
+              ? round.country
+              : friendlyCountry(round.cc, round.country)) + '</small></span>' +
         '<span class="breakdown__km">' + esc(puzzle.formatDistance(r.distanceKm)) + '</span>' +
         '<span class="breakdown__pts">' + r.points + '</span>' +
       '</div>';
     }).join('');
 
     openPanel(
-      '<h2>' + esc(MT.share.gameLabel(state.game.mode, state.game.number)) + '</h2>' +
+      '<h2>' + esc(MT.share.gameLabel(state.game.mode, state.game.number, state.game)) + '</h2>' +
       (replay ? '<p class="panel__sub">You have already played this one.</p>' : '') +
       '<div class="total"><span class="total__value">' + total + '</span>' +
-        '<span class="total__max">/ ' + puzzle.MAX_SCORE + '</span></div>' +
-      '<div class="total__grade">' + esc(puzzle.grade(total)) + '</div>' +
+        '<span class="total__max">/ ' + max + '</span></div>' +
+      '<div class="total__grade">' + esc(puzzle.grade(total, max)) + '</div>' +
       '<div class="squares">' + squares + '</div>' +
       '<div class="breakdown">' + rows + '</div>' +
       '<div class="panel__actions">' +
@@ -389,7 +471,8 @@
    * ------------------------------------------------------------------ */
   function writeUrl(mode, number) {
     if (!window.history || !history.replaceState) return;
-    var q = '?' + (mode === 'daily' ? 'd=' : 'p=') + number;
+    var key = mode === 'daily' ? 'd=' : (mode === 'continent' ? 'c=' : 'p=');
+    var q = '?' + key + encodeURIComponent(number);
     try { history.replaceState(null, '', location.pathname + q); } catch (e) { /* file:// */ }
   }
 
@@ -401,6 +484,17 @@
       return { mode: 'daily', number: Math.min(d, puzzle.todayNumber()) };
     }
     if (Number.isFinite(p) && p >= 1) return { mode: 'practice', number: p };
+    // A continent run is "<continent>.<number>", so a shared link reopens the
+    // same continent in the same order.
+    var c = params.get('c');
+    if (c) {
+      var dot = c.lastIndexOf('.');
+      var name = dot > 0 ? c.slice(0, dot) : c;
+      var n = dot > 0 ? parseInt(c.slice(dot + 1), 10) : 1;
+      if (puzzle.continentCountries(name).length) {
+        return { mode: 'continent', continent: name, number: Number.isFinite(n) ? n : 1 };
+      }
+    }
     return null;
   }
 
@@ -412,10 +506,12 @@
    * Wiring
    * ------------------------------------------------------------------ */
   function handleAction(act) {
+    if (act.indexOf('continent:') === 0) { startContinent(act.slice(10)); return; }
     switch (act) {
       case 'daily': startGame('daily', puzzle.todayNumber()); break;
       case 'practice-random': startGame('practice', randomPracticeNumber()); break;
       case 'choose': showChooser(); break;
+      case 'continents': showContinents(); break;
       case 'help': showHelp(true); break;
       case 'menu': showStart(); break;
       case 'close':
@@ -463,7 +559,7 @@
   }
 
   function init() {
-    ['gameChip', 'runningScore', 'btnStats', 'btnHelp', 'prompt', 'promptRound', 'promptMult',
+    ['gameChip', 'runningScore', 'runningMax', 'btnStats', 'btnHelp', 'prompt', 'promptRound', 'promptMult',
      'promptCity', 'promptCountry', 'actionbar', 'actionHint', 'btnSubmit', 'roundSheet',
      'resultCity', 'resultCountry', 'resultPoints', 'resultBreakdown', 'resultDistance',
      'btnNext', 'overlay', 'panel', 'toast', 'btnZoomIn', 'btnZoomOut', 'btnReset']
@@ -535,7 +631,8 @@
     });
 
     var fromUrl = readUrl();
-    if (fromUrl) startGame(fromUrl.mode, fromUrl.number);
+    if (fromUrl && fromUrl.mode === 'continent') startContinent(fromUrl.continent, fromUrl.number);
+    else if (fromUrl) startGame(fromUrl.mode, fromUrl.number);
     else showStart();
   }
 
