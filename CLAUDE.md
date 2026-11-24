@@ -2,11 +2,13 @@
 
 ## Branching
 
-Work directly on `main`. Commit and push straight to it — do not create feature
-branches for this project unless explicitly asked.
+Work on `dev`. Never commit or push to `main` directly; after each push, ask
+before merging `dev` into `main`. This follows the global `repo-protocol`
+skill — this repo is not an exception to it.
 
-`main` is the default branch and the deployment source; a push to it publishes
-the site.
+`main` is the default branch and the deployment source, so the merge is what
+publishes the site. Nothing reaches the live game until one happens, which
+makes the merge the moment to be sure of a change rather than the push.
 
 ## Layout
 
